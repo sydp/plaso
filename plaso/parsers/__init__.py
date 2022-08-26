@@ -2,6 +2,7 @@
 """This file imports Python modules that register parsers."""
 
 from plaso.parsers import android_app_usage
+from plaso.parsers import android_logcat
 from plaso.parsers import apache_access
 from plaso.parsers import apt_history
 from plaso.parsers import asl
