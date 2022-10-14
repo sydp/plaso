@@ -3,13 +3,19 @@
 
 import collections
 import heapq
+import os
+
+from dfdatetime import interface as dfdatetime_interface
+from dfvfs.path import path_spec as dfvfs_path_spec
 
 from plaso.containers import events
 from plaso.engine import processing_status
 from plaso.lib import bufferlib
 from plaso.lib import definitions
+from plaso.lib import errors
 from plaso.multi_process import engine
 from plaso.multi_process import logger
+from plaso.output import mediator as output_mediator
 from plaso.storage import time_range as storage_time_range
 
 
@@ -64,9 +70,11 @@ class PsortEventHeap(object):
             attribute_value is None):
           continue
 
-        # Note that support for event_data.pathspec is kept for backwards
-        # compatibility. The current value is event_data_stream.path_spec.
-        if attribute_name in ('path_spec', 'pathspec'):
+        # Ignore date and time values.
+        if isinstance(attribute_value, dfdatetime_interface.DateTimeValues):
+          continue
+
+        if isinstance(attribute_value, dfvfs_path_spec.PathSpec):
           attribute_value = attribute_value.comparable
 
         elif isinstance(attribute_value, dict):
@@ -133,8 +141,8 @@ class PsortEventHeap(object):
 
     if event.timestamp_desc in (
         definitions.TIME_DESCRIPTION_LAST_ACCESS,
-        definitions.TIME_DESCRIPTION_CHANGE,
         definitions.TIME_DESCRIPTION_CREATION,
+        definitions.TIME_DESCRIPTION_METADATA_MODIFICATION,
         definitions.TIME_DESCRIPTION_MODIFICATION):
       macb_group_identifier = content_identifier
     else:
@@ -218,6 +226,10 @@ class OutputAndFormattingMultiProcessEngine(engine.MultiProcessEngine):
 
   _HEAP_MAXIMUM_EVENTS = 100000
 
+  _MESSAGE_FORMATTERS_DIRECTORY_NAME = 'formatters'
+
+  _MESSAGE_FORMATTERS_FILE_NAME = 'formatters.yaml'
+
   def __init__(self):
     """Initializes an output and formatting multi-processing engine."""
     super(OutputAndFormattingMultiProcessEngine, self).__init__()
@@ -228,9 +240,51 @@ class OutputAndFormattingMultiProcessEngine(engine.MultiProcessEngine):
     self._export_event_timestamp = 0
     self._knowledge_base = None
     self._number_of_consumed_events = 0
+    self._output_mediator = None
     self._processing_configuration = None
     self._status = definitions.STATUS_INDICATOR_IDLE
     self._status_update_callback = None
+
+  def _CreateOutputMediator(
+      self, knowledge_base_object, processing_configuration):
+    """Creates an output mediator.
+
+    Args:
+      knowledge_base_object (KnowledgeBase): contains information from
+          the source data needed for processing.
+      processing_configuration (ProcessingConfiguration): processing
+          configuration.
+
+    Returns:
+      OutputMediator: mediates interactions between output modules and other
+          components, such as storage and dfVFS.
+
+    Raises:
+      BadConfigOption: if the message formatters file or directory cannot be
+          read.
+    """
+    mediator = output_mediator.OutputMediator(
+        knowledge_base_object,
+        data_location=processing_configuration.data_location,
+        dynamic_time=processing_configuration.dynamic_time,
+        preferred_encoding=processing_configuration.preferred_encoding)
+
+    if processing_configuration.preferred_language:
+      try:
+        mediator.SetPreferredLanguageIdentifier(
+            processing_configuration.preferred_language)
+      except (KeyError, TypeError):
+        logger.warning('Unable to to set preferred language: {0!s}.'.format(
+              processing_configuration.preferred_language))
+
+    mediator.SetTimeZone(processing_configuration.preferred_time_zone)
+
+    mediator.SetTextPrepend(processing_configuration.text_prepend)
+
+    self._ReadMessageFormatters(
+        mediator, processing_configuration.data_location)
+
+    return mediator
 
   def _ExportEvent(
       self, storage_reader, output_module, event, event_data, event_data_stream,
@@ -392,11 +446,12 @@ class OutputAndFormattingMultiProcessEngine(engine.MultiProcessEngine):
 
       if macb_group_identifier is None:
         if macb_group:
-          output_module.WriteEventMACBGroup(macb_group)
+          output_module.WriteEventMACBGroup(self._output_mediator, macb_group)
           macb_group = []
 
         output_module.WriteEvent(
-            event, event_data, event_data_stream, event_tag)
+            self._output_mediator, event, event_data, event_data_stream,
+            event_tag)
 
       else:
         if (last_macb_group_identifier == macb_group_identifier or
@@ -404,7 +459,7 @@ class OutputAndFormattingMultiProcessEngine(engine.MultiProcessEngine):
           macb_group.append((event, event_data, event_data_stream, event_tag))
 
         else:
-          output_module.WriteEventMACBGroup(macb_group)
+          output_module.WriteEventMACBGroup(self._output_mediator, macb_group)
           macb_group = [(event, event_data, event_data_stream, event_tag)]
 
         self._events_status.number_of_macb_grouped_events += 1
@@ -413,7 +468,44 @@ class OutputAndFormattingMultiProcessEngine(engine.MultiProcessEngine):
       last_content_identifier = content_identifier
 
     if macb_group:
-      output_module.WriteEventMACBGroup(macb_group)
+      output_module.WriteEventMACBGroup(self._output_mediator, macb_group)
+
+  def _ReadMessageFormatters(self, output_mediator_object, data_location):
+    """Reads the message formatters from a formatters file or directory.
+
+    Args:
+      output_mediator_object (OutputMediator): mediates interactions between
+          output modules and other components, such as storage and dfVFS.
+      data_location (str): path to the data files.
+
+    Raises:
+      BadConfigOption: if the message formatters file or directory cannot be
+          read.
+    """
+    formatters_directory = os.path.join(
+        data_location, self._MESSAGE_FORMATTERS_DIRECTORY_NAME)
+    formatters_file = os.path.join(
+        data_location, self._MESSAGE_FORMATTERS_FILE_NAME)
+
+    if os.path.isdir(formatters_directory):
+      try:
+        output_mediator_object.ReadMessageFormattersFromDirectory(
+            formatters_directory)
+      except KeyError as exception:
+        raise errors.BadConfigOption((
+            'Unable to read message formatters from directory: {0:s} with '
+            'error: {1!s}').format(formatters_directory, exception))
+
+    elif os.path.isfile(formatters_file):
+      try:
+        output_mediator_object.ReadMessageFormattersFromFile(formatters_file)
+      except KeyError as exception:
+        raise errors.BadConfigOption((
+            'Unable to read message formatters from file: {0:s} with error: '
+            '{1!s}').format(formatters_file, exception))
+
+    else:
+      raise errors.BadConfigOption('Missing formatters file and directory.')
 
   def _UpdateForemanProcessStatus(self):
     """Update the foreman process status."""
@@ -454,6 +546,10 @@ class OutputAndFormattingMultiProcessEngine(engine.MultiProcessEngine):
       use_time_slicer (Optional[bool]): True if the 'time slicer' should be
           used. The 'time slicer' will provide a context of events around
           an event of interest.
+
+    Raises:
+      BadConfigOption: if the message formatters file or directory cannot be
+          read.
     """
     self._events_status = processing_status.EventsStatus()
     self._knowledge_base = knowledge_base_object
@@ -480,7 +576,11 @@ class OutputAndFormattingMultiProcessEngine(engine.MultiProcessEngine):
 
     self._events_status.total_number_of_events = total_number_of_events
 
-    output_module.WriteHeader()
+    self._output_mediator = self._CreateOutputMediator(
+        knowledge_base_object, processing_configuration)
+    self._output_mediator.SetStorageReader(storage_reader)
+
+    output_module.WriteHeader(output_mediator)
 
     self._StartStatusUpdateThread()
 
@@ -507,7 +607,8 @@ class OutputAndFormattingMultiProcessEngine(engine.MultiProcessEngine):
     self._StopProfiling()
 
     # Reset values.
-    self._status_update_callback = None
-    self._processing_configuration = None
-    self._knowledge_base = None
     self._events_status = None
+    self._knowledge_base = None
+    self._output_mediator = None
+    self._processing_configuration = None
+    self._status_update_callback = None

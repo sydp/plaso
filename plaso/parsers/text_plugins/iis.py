@@ -81,66 +81,75 @@ class WinIISTextPlugin(interface.TextPlugin):
 
   _MAXIMUM_LINE_LENGTH = 800
 
-  BLANK = pyparsing.Literal('-')
-  WORD = pyparsing.Word(pyparsing.alphanums + '-') | BLANK
+  _BLANK = pyparsing.Literal('-')
 
-  INTEGER = pyparsing.Word(pyparsing.nums).setParseAction(
-      text_parser.ConvertTokenToInteger) | BLANK
+  _WORD = pyparsing.Word(pyparsing.alphanums + '-') | _BLANK
 
-  IP_ADDRESS = (
-      text_parser.PyparsingConstants.IPV4_ADDRESS |
-      text_parser.PyparsingConstants.IPV6_ADDRESS | BLANK)
+  _INTEGER = pyparsing.Word(pyparsing.nums).setParseAction(
+      text_parser.ConvertTokenToInteger) | _BLANK
+
+  _TWO_DIGITS = pyparsing.Word(pyparsing.nums, exact=2).setParseAction(
+      text_parser.PyParseIntCast)
+
+  _FOUR_DIGITS = pyparsing.Word(pyparsing.nums, exact=4).setParseAction(
+      text_parser.PyParseIntCast)
+
+  _IP_ADDRESS = (
+      pyparsing.pyparsing_common.ipv4_address |
+      pyparsing.pyparsing_common.ipv6_address | _BLANK)
 
   PORT = pyparsing.Word(pyparsing.nums, max=6).setParseAction(
-      text_parser.ConvertTokenToInteger) | BLANK
+      text_parser.ConvertTokenToInteger) | _BLANK
 
   # Username can consist of: domain.username
-  USERNAME = pyparsing.Word(pyparsing.alphanums + '.-') | BLANK
+  USERNAME = pyparsing.Word(pyparsing.alphanums + '.-') | _BLANK
 
   _URI_SAFE_CHARACTERS = '/.?&+;_=()-:,%'
   _URI_UNSAFE_CHARACTERS = '{}|\\^~[]`\'"<>'
 
-  URI = pyparsing.Word(pyparsing.alphanums + _URI_SAFE_CHARACTERS) | BLANK
+  URI = pyparsing.Word(pyparsing.alphanums + _URI_SAFE_CHARACTERS) | _BLANK
 
   # Per https://blogs.iis.net/nazim/use-of-special-characters-like-in-an-iis-url
   # IIS does not require that a query comply with RFC1738 restrictions on valid
   # URI characters
   QUERY = (pyparsing.Word(
       pyparsing.alphanums + _URI_SAFE_CHARACTERS + _URI_UNSAFE_CHARACTERS) |
-           BLANK)
+           _BLANK)
 
-  DATE_TIME = (
-      text_parser.PyparsingConstants.DATE_ELEMENTS +
-      text_parser.PyparsingConstants.TIME_ELEMENTS)
-
-  DATE_METADATA = (
-      pyparsing.Literal('Date:') + DATE_TIME.setResultsName('date_time'))
+  _DATE_TIME = (
+      _FOUR_DIGITS.setResultsName('year') + pyparsing.Suppress('-') +
+      _TWO_DIGITS.setResultsName('month') + pyparsing.Suppress('-') +
+      _TWO_DIGITS.setResultsName('day_of_month') +
+      _TWO_DIGITS.setResultsName('hours') + pyparsing.Suppress(':') +
+      _TWO_DIGITS.setResultsName('minutes') + pyparsing.Suppress(':') +
+      _TWO_DIGITS.setResultsName('seconds')).setResultsName('date_time')
 
   FIELDS_METADATA = (
       pyparsing.Literal('Fields:') +
       pyparsing.SkipTo(pyparsing.LineEnd()).setResultsName('fields'))
 
   COMMENT = pyparsing.Literal('#') + (
-      DATE_METADATA | FIELDS_METADATA | pyparsing.SkipTo(pyparsing.LineEnd()))
+      pyparsing.Literal('Date:') + _DATE_TIME | FIELDS_METADATA |
+      pyparsing.SkipTo(pyparsing.LineEnd()))
 
   # IIS 6.x fields: date time s-sitename s-ip cs-method cs-uri-stem
   # cs-uri-query s-port cs-username c-ip cs(User-Agent) sc-status
   # sc-substatus sc-win32-status
 
   LOG_LINE_6_0 = (
-      DATE_TIME.setResultsName('date_time') +
+      _DATE_TIME +
       URI.setResultsName('s_sitename') +
-      IP_ADDRESS.setResultsName('dest_ip') +
-      WORD.setResultsName('http_method') +
+      _IP_ADDRESS.setResultsName('dest_ip') +
+      _WORD.setResultsName('http_method') +
       URI.setResultsName('cs_uri_stem') +
       URI.setResultsName('cs_uri_query') +
       PORT.setResultsName('dest_port') +
-      WORD.setResultsName('cs_username') +
-      IP_ADDRESS.setResultsName('source_ip') +
+      _WORD.setResultsName('cs_username') +
+      _IP_ADDRESS.setResultsName('source_ip') +
       URI.setResultsName('user_agent') +
-      INTEGER.setResultsName('sc_status') +
-      INTEGER.setResultsName('sc_substatus') +
-      INTEGER.setResultsName('sc_win32_status'))
+      _INTEGER.setResultsName('sc_status') +
+      _INTEGER.setResultsName('sc_substatus') +
+      _INTEGER.setResultsName('sc_win32_status'))
 
   # IIS 7.x fields: date time s-ip cs-method cs-uri-stem cs-uri-query
   # s-port cs-username c-ip cs(User-Agent) sc-status sc-substatus
@@ -150,31 +159,37 @@ class WinIISTextPlugin(interface.TextPlugin):
 
   # Common fields. Set results name with underscores, not hyphens because regex
   # will not pick them up.
-  _LOG_LINE_STRUCTURES['date'] = (
-      text_parser.PyparsingConstants.DATE.setResultsName('date'))
-  _LOG_LINE_STRUCTURES['time'] = (
-      text_parser.PyparsingConstants.TIME.setResultsName('time'))
+  _LOG_LINE_STRUCTURES['date'] = pyparsing.Group(
+      _FOUR_DIGITS.setResultsName('year') + pyparsing.Suppress('-') +
+      _TWO_DIGITS.setResultsName('month') + pyparsing.Suppress('-') +
+      _TWO_DIGITS.setResultsName('day_of_month')).setResultsName('date')
+
+  _LOG_LINE_STRUCTURES['time'] = pyparsing.Group(
+      _TWO_DIGITS.setResultsName('hours') + pyparsing.Suppress(':') +
+      _TWO_DIGITS.setResultsName('minutes') + pyparsing.Suppress(':') +
+      _TWO_DIGITS.setResultsName('seconds')).setResultsName('time')
+
   _LOG_LINE_STRUCTURES['s-sitename'] = URI.setResultsName('s_sitename')
-  _LOG_LINE_STRUCTURES['s-ip'] = IP_ADDRESS.setResultsName('dest_ip')
-  _LOG_LINE_STRUCTURES['cs-method'] = WORD.setResultsName('http_method')
+  _LOG_LINE_STRUCTURES['s-ip'] = _IP_ADDRESS.setResultsName('dest_ip')
+  _LOG_LINE_STRUCTURES['cs-method'] = _WORD.setResultsName('http_method')
   _LOG_LINE_STRUCTURES['cs-uri-stem'] = URI.setResultsName(
       'requested_uri_stem')
   _LOG_LINE_STRUCTURES['cs-uri-query'] = QUERY.setResultsName('cs_uri_query')
   _LOG_LINE_STRUCTURES['s-port'] = PORT.setResultsName('dest_port')
   _LOG_LINE_STRUCTURES['cs-username'] = USERNAME.setResultsName('cs_username')
-  _LOG_LINE_STRUCTURES['c-ip'] = IP_ADDRESS.setResultsName('source_ip')
+  _LOG_LINE_STRUCTURES['c-ip'] = _IP_ADDRESS.setResultsName('source_ip')
   _LOG_LINE_STRUCTURES['cs(User-Agent)'] = URI.setResultsName('user_agent')
-  _LOG_LINE_STRUCTURES['sc-status'] = INTEGER.setResultsName('http_status')
-  _LOG_LINE_STRUCTURES['sc-substatus'] = INTEGER.setResultsName(
+  _LOG_LINE_STRUCTURES['sc-status'] = _INTEGER.setResultsName('http_status')
+  _LOG_LINE_STRUCTURES['sc-substatus'] = _INTEGER.setResultsName(
       'sc_substatus')
-  _LOG_LINE_STRUCTURES['sc-win32-status'] = INTEGER.setResultsName(
+  _LOG_LINE_STRUCTURES['sc-win32-status'] = _INTEGER.setResultsName(
       'sc_win32_status')
 
   # Less common fields.
   _LOG_LINE_STRUCTURES['s-computername'] = URI.setResultsName('s_computername')
-  _LOG_LINE_STRUCTURES['sc-bytes'] = INTEGER.setResultsName('sent_bytes')
-  _LOG_LINE_STRUCTURES['cs-bytes'] = INTEGER.setResultsName('received_bytes')
-  _LOG_LINE_STRUCTURES['time-taken'] = INTEGER.setResultsName('time_taken')
+  _LOG_LINE_STRUCTURES['sc-bytes'] = _INTEGER.setResultsName('sent_bytes')
+  _LOG_LINE_STRUCTURES['cs-bytes'] = _INTEGER.setResultsName('received_bytes')
+  _LOG_LINE_STRUCTURES['time-taken'] = _INTEGER.setResultsName('time_taken')
   _LOG_LINE_STRUCTURES['cs-version'] = URI.setResultsName('protocol_version')
   _LOG_LINE_STRUCTURES['cs-host'] = URI.setResultsName('cs_host')
   _LOG_LINE_STRUCTURES['cs(Cookie)'] = URI.setResultsName('cs_cookie')
@@ -226,7 +241,7 @@ class WinIISTextPlugin(interface.TextPlugin):
 
     log_line_structure = pyparsing.Empty()
     if fields[0] == 'date' and fields[1] == 'time':
-      log_line_structure += self.DATE_TIME.setResultsName('date_time')
+      log_line_structure += self._DATE_TIME
       fields = fields[2:]
 
     for member in fields:
@@ -378,4 +393,4 @@ class WinIISTextPlugin(interface.TextPlugin):
     return found_signature
 
 
-text_parser.PyparsingSingleLineTextParser.RegisterPlugin(WinIISTextPlugin)
+text_parser.SingleLineTextParser.RegisterPlugin(WinIISTextPlugin)

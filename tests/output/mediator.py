@@ -26,7 +26,7 @@ class OutputMediatorTest(test_lib.OutputModuleTestCase):
            'Reporter <CRON> PID: 8442 (pam_unix(cron:session): session\n '
            'closed for user root)'),
        'timestamp': '2012-06-27 18:17:01',
-       'timestamp_desc': definitions.TIME_DESCRIPTION_CHANGE,
+       'timestamp_desc': definitions.TIME_DESCRIPTION_METADATA_MODIFICATION,
        'username': 'root'}]
 
   def setUp(self):
@@ -47,6 +47,8 @@ class OutputMediatorTest(test_lib.OutputModuleTestCase):
 
     output_mediator._ReadMessageFormattersFile(test_file_path)
     self.assertEqual(len(output_mediator._message_formatters), 2)
+
+  # TODO: add tests for _ReadSourceMappings
 
   # TODO: add tests for GetDisplayNameForPathSpec
 

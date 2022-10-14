@@ -46,14 +46,15 @@ class APTHistoryLogTextPlugin(interface.TextPlugin):
   # APT History log lines can be very long.
   _MAXIMUM_LINE_LENGTH = 65536
 
-  _HYPHEN = text_parser.PyparsingConstants.HYPHEN
+  _TWO_DIGITS = pyparsing.Word(pyparsing.nums, exact=2).setParseAction(
+      text_parser.PyParseIntCast)
 
-  _FOUR_DIGITS = text_parser.PyparsingConstants.FOUR_DIGITS
-  _TWO_DIGITS = text_parser.PyparsingConstants.TWO_DIGITS
+  _FOUR_DIGITS = pyparsing.Word(pyparsing.nums, exact=4).setParseAction(
+      text_parser.PyParseIntCast)
 
   _APTHISTORY_DATE_TIME = pyparsing.Group(
-      _FOUR_DIGITS + _HYPHEN +
-      _TWO_DIGITS + _HYPHEN +
+      _FOUR_DIGITS + pyparsing.Suppress('-') +
+      _TWO_DIGITS + pyparsing.Suppress('-') +
       _TWO_DIGITS +
       _TWO_DIGITS + pyparsing.Suppress(':') +
       _TWO_DIGITS + pyparsing.Suppress(':') +
@@ -110,7 +111,7 @@ class APTHistoryLogTextPlugin(interface.TextPlugin):
 
     Returns:
       dfdatetime.TimeElements: date and time extracted from the structure or
-          None f the structure does not represent a valid string.
+          None if the structure does not represent a valid string.
     """
     # Ensure time_elements_tuple is not a pyparsing.ParseResults otherwise
     # copy.deepcopy() of the dfDateTime object will fail on Python 3.8 with:
@@ -306,5 +307,4 @@ class APTHistoryLogTextPlugin(interface.TextPlugin):
     return bool(parsed_structure)
 
 
-text_parser.PyparsingSingleLineTextParser.RegisterPlugin(
-    APTHistoryLogTextPlugin)
+text_parser.SingleLineTextParser.RegisterPlugin(APTHistoryLogTextPlugin)

@@ -11,7 +11,6 @@ from plaso.cli.helpers import profiling
 from plaso.analyzers.hashers import manager as hashers_manager
 from plaso.lib import errors
 from plaso.output import manager as output_manager
-from plaso.output import mediator as output_mediator
 
 
 # TODO: pass argument_parser instead of argument_group and add groups
@@ -102,36 +101,18 @@ class OutputModuleOptions(object):
   # predefined set of output fields.
   _DEPRECATED_OUTPUT_FORMATS = frozenset(['l2tcsv', 'l2ttln', 'tln'])
 
-  _MESSAGE_FORMATTERS_DIRECTORY_NAME = 'formatters'
-  _MESSAGE_FORMATTERS_FILE_NAME = 'formatters.yaml'
-
   def __init__(self):
     """Initializes output module options."""
     super(OutputModuleOptions, self).__init__()
+    self._output_additional_fields = []
+    self._output_custom_fields = []
     self._output_dynamic_time = None
     self._output_filename = None
     self._output_format = None
-    self._output_mediator = None
     self._output_module = None
     self._output_time_zone = None
 
     self.list_time_zones = False
-
-  def _CreateOutputMediator(self):
-    """Creates an output mediator.
-
-    Raises:
-      BadConfigOption: if the message formatters file or directory cannot be
-          read.
-    """
-    self._output_mediator = output_mediator.OutputMediator(
-        self._knowledge_base, data_location=self._data_location,
-        dynamic_time=self._output_dynamic_time,
-        preferred_encoding=self.preferred_encoding)
-
-    self._output_mediator.SetTimeZone(self._output_time_zone)
-
-    self._ReadMessageFormatters()
 
   def _CreateOutputModule(self, options):
     """Creates an output module.
@@ -154,11 +135,9 @@ class OutputModuleOptions(object):
           'alternative output format like: dynamic.').format(
               self._output_format))
 
-    self._CreateOutputMediator()
-
     try:
       output_module = output_manager.OutputManager.NewOutputModule(
-          self._output_format, self._output_mediator)
+          self._output_format)
 
     except (KeyError, ValueError) as exception:
       raise RuntimeError(
@@ -186,9 +165,10 @@ class OutputModuleOptions(object):
     # those that may be missing.
     missing_parameters = output_module.GetMissingArguments()
     if missing_parameters and self._unattended_mode:
+      parameters_string = ', '.join(missing_parameters)
       raise errors.BadConfigOption(
           'Unable to create output module missing parameters: {0:s}'.format(
-              ', '.join(missing_parameters)))
+              parameters_string))
 
     while missing_parameters:
       self._PromptUserForMissingOutputModuleParameters(
@@ -196,6 +176,20 @@ class OutputModuleOptions(object):
 
       helpers_manager.ArgumentHelperManager.ParseOptions(options, output_module)
       missing_parameters = output_module.GetMissingArguments()
+
+    if output_module.SUPPORTS_ADDITIONAL_FIELDS:
+      output_module.SetAdditionalFields(self._output_additional_fields)
+    elif self._output_additional_fields:
+      self._PrintUserWarning(
+          'output module: {0:s} does not support additional fields'.format(
+              self._output_format))
+
+    if output_module.SUPPORTS_CUSTOM_FIELDS:
+      output_module.SetCustomFields(self._output_custom_fields)
+    elif self._output_custom_fields:
+      self._PrintUserWarning(
+          'output module: {0:s} does not support custom fields'.format(
+              self._output_format))
 
     return output_module
 
@@ -220,6 +214,21 @@ class OutputModuleOptions(object):
     Raises:
       BadConfigOption: if the options are invalid.
     """
+    additional_fields = self.ParseStringOption(options, 'additional_fields')
+    if additional_fields:
+      self._output_additional_fields = additional_fields.split(',')
+
+    custom_fields = self.ParseStringOption(options, 'custom_fields')
+    if custom_fields:
+      for custom_field in custom_fields.split(','):
+        try:
+          name, value = custom_field.split(':')
+        except ValueError:
+          raise errors.BadConfigOption(
+              'Unsupported custom field: {0:s}'.format(custom_field))
+
+        self._output_custom_fields.append((name, value))
+
     self._output_dynamic_time = getattr(options, 'dynamic_time', False)
 
     time_zone_string = self.ParseStringOption(options, 'output_time_zone')
@@ -252,39 +261,6 @@ class OutputModuleOptions(object):
 
       setattr(options, parameter, value)
 
-  def _ReadMessageFormatters(self):
-    """Reads the message formatters from a formatters file or directory.
-
-    Raises:
-      BadConfigOption: if the message formatters file or directory cannot be
-          read.
-    """
-    formatters_directory = os.path.join(
-        self._data_location, self._MESSAGE_FORMATTERS_DIRECTORY_NAME)
-    formatters_file = os.path.join(
-        self._data_location, self._MESSAGE_FORMATTERS_FILE_NAME)
-
-    if os.path.isdir(formatters_directory):
-      try:
-        self._output_mediator.ReadMessageFormattersFromDirectory(
-            formatters_directory)
-      except KeyError as exception:
-        raise errors.BadConfigOption((
-            'Unable to read message formatters from directory: {0:s} with '
-            'error: {1!s}').format(formatters_directory, exception))
-
-    elif os.path.isfile(formatters_file):
-      try:
-        self._output_mediator.ReadMessageFormattersFromFile(
-            formatters_file)
-      except KeyError as exception:
-        raise errors.BadConfigOption((
-            'Unable to read message formatters from file: {0:s} with error: '
-            '{1!s}').format(formatters_file, exception))
-
-    else:
-      raise errors.BadConfigOption('Missing formatters file and directory.')
-
   def AddOutputOptions(self, argument_group):
     """Adds the output options to the argument group.
 
@@ -292,9 +268,28 @@ class OutputModuleOptions(object):
       argument_group (argparse._ArgumentGroup): argparse argument group.
     """
     argument_group.add_argument(
+        '--additional_fields', '--additional-fields', dest='additional_fields',
+        type=str, action='store', default='', help=(
+            'Defines additional fields to be included in the output besides '
+            'the default fields. Multiple additional field names can be '
+            'defined as a list of comma separated values. Output formats that '
+            'support additional fields are: dynamic, opensearch and xlsx.'))
+
+    argument_group.add_argument(
+        '--custom_fields', '--custom-fields', dest='custom_fields',
+        type=str, action='store', default='', help=(
+            'Defines custom fields to be included in the output besides '
+            'the default fields. A custom field is defined as "name:value". '
+            'Multiple custom field names can be defined as list of comma '
+            'separated values. Note that regular fields will are favoured '
+            'above custom fields with same name. Output formats that support '
+            'this are: dynamic, opensearch and xlsx.'))
+
+    argument_group.add_argument(
         '--dynamic_time', '--dynamic-time', dest='dynamic_time',
         action='store_true', default=False, help=(
-            'Indicate that the output should use dynamic time.'))
+            'Indicate that the output should use dynamic time. Output formats '
+            'that support dynamic time are: dynamic'))
 
     # Note the default here is None so we can determine if the time zone
     # option was set.
@@ -302,9 +297,9 @@ class OutputModuleOptions(object):
         '--output_time_zone', '--output-time-zone', dest='output_time_zone',
         action='store', metavar='TIME_ZONE', type=str, default=None, help=(
             'time zone of date and time values written to the output, if '
-            'supported by the output format. Output formats that support '
-            'this are: dynamic and l2t_csv. Use "list" to see a list of '
-            'available time zones.'))
+            'supported by the output format. Use "list" to see a list of '
+            'available time zones. Output formats that support an output '
+            'time zone are: dynamic and l2t_csv.'))
 
   def ListOutputModules(self):
     """Lists the output modules."""

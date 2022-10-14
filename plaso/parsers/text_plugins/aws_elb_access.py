@@ -179,23 +179,31 @@ class AWSELBTextPlugin(interface.TextPlugin):
 
   _WORD = pyparsing.Word(pyparsing.printables) | _BLANK
 
-  _UNSIGNED_INTEGER = text_parser.PyparsingConstants.INTEGER | _BLANK
+  _INTEGER = pyparsing.Word(pyparsing.nums).setParseAction(
+      text_parser.PyParseIntCast)
+
+  _UNSIGNED_INTEGER = _INTEGER | _BLANK
 
   _SIGNED_INTEGER = pyparsing.Word('-', pyparsing.nums) | _UNSIGNED_INTEGER
 
   _FLOATING_POINT = (
       pyparsing.Word(pyparsing.nums + '.') | pyparsing.Literal('-1'))
 
+  _IP_ADDRESS = (
+      pyparsing.pyparsing_common.ipv4_address |
+      pyparsing.pyparsing_common.ipv6_address)
+
   _PORT = pyparsing.Word(pyparsing.nums, max=6).setParseAction(
       text_parser.ConvertTokenToInteger) | _BLANK
 
-  _CLIENT_IP_ADDRESS_PORT = pyparsing.Group(
-      text_parser.PyparsingConstants.IP_ADDRESS('source_ip_address') +
-          pyparsing.Suppress(':') + _PORT('source_port') | _BLANK)
+  _SOURCE_IP_ADDRESS_AND_PORT = pyparsing.Group(
+      _IP_ADDRESS.setResultsName('source_ip_address') +
+      pyparsing.Suppress(':') + _PORT.setResultsName('source_port') | _BLANK)
 
-  _DESTINATION_IP_ADDRESS_PORT = pyparsing.Group(
-      text_parser.PyparsingConstants.IP_ADDRESS('destination_ip_address') +
-          pyparsing.Suppress(':') + _PORT('destination_port') | _BLANK)
+  _DESTINATION_IP_ADDRESS_AND_PORT = pyparsing.Group(
+      _IP_ADDRESS.setResultsName('destination_ip_address') +
+      pyparsing.Suppress(':') + _PORT.setResultsName('destination_port') |
+      _BLANK)
 
   _DATE_TIME_ISOFORMAT_STRING = pyparsing.Combine(
       pyparsing.Word(pyparsing.nums, exact=4) + pyparsing.Literal('-') +
@@ -219,8 +227,8 @@ class AWSELBTextPlugin(interface.TextPlugin):
       _WORD.setResultsName('request_type') +
       _DATE_TIME_ISOFORMAT_STRING.setResultsName('time') +
       _WORD.setResultsName('resource_identifier') +
-      _CLIENT_IP_ADDRESS_PORT.setResultsName('source_ip_port') +
-      _DESTINATION_IP_ADDRESS_PORT.setResultsName('destination_ip_port') +
+      _SOURCE_IP_ADDRESS_AND_PORT.setResultsName('source_ip_port') +
+      _DESTINATION_IP_ADDRESS_AND_PORT.setResultsName('destination_ip_port') +
       _FLOATING_POINT.setResultsName('request_processing_time') +
       _FLOATING_POINT.setResultsName('destination_processing_time') +
       _FLOATING_POINT.setResultsName('response_processing_time') +
@@ -265,8 +273,8 @@ class AWSELBTextPlugin(interface.TextPlugin):
       _DATE_TIME_ISOFORMAT_STRING_WITHOUT_TIMEZONE.setResultsName('time') +
       _WORD.setResultsName('resource_identifier') +
       _WORD.setResultsName('listener') +
-      _CLIENT_IP_ADDRESS_PORT.setResultsName('source_ip_port') +
-      _DESTINATION_IP_ADDRESS_PORT.setResultsName('destination_ip_port') +
+      _SOURCE_IP_ADDRESS_AND_PORT.setResultsName('source_ip_port') +
+      _DESTINATION_IP_ADDRESS_AND_PORT.setResultsName('destination_ip_port') +
       _UNSIGNED_INTEGER.setResultsName('connection_time') +
       _UNSIGNED_INTEGER.setResultsName('handshake_time') +
       _UNSIGNED_INTEGER.setResultsName('received_bytes') +
@@ -288,8 +296,8 @@ class AWSELBTextPlugin(interface.TextPlugin):
   _LOG_LINE_CLASSIC = (
       _DATE_TIME_ISOFORMAT_STRING.setResultsName('time') +
       _WORD.setResultsName('resource_identifier') +
-      _CLIENT_IP_ADDRESS_PORT.setResultsName('source_ip_port') +
-      _DESTINATION_IP_ADDRESS_PORT.setResultsName('destination_ip_port') +
+      _SOURCE_IP_ADDRESS_AND_PORT.setResultsName('source_ip_port') +
+      _DESTINATION_IP_ADDRESS_AND_PORT.setResultsName('destination_ip_port') +
       _FLOATING_POINT.setResultsName('request_processing_time') +
       _FLOATING_POINT.setResultsName('destination_processing_time') +
       _FLOATING_POINT.setResultsName('response_processing_time') +
@@ -488,4 +496,4 @@ class AWSELBTextPlugin(interface.TextPlugin):
     return bool(parsed_structure)
 
 
-text_parser.PyparsingSingleLineTextParser.RegisterPlugin(AWSELBTextPlugin)
+text_parser.SingleLineTextParser.RegisterPlugin(AWSELBTextPlugin)

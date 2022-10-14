@@ -39,7 +39,7 @@ class FieldFormattingHelperTest(test_lib.OutputModuleTestCase):
            'Reporter <CRON> PID: 8442 (pam_unix(cron:session): session\n '
            'closed for user root)'),
        'timestamp': '2012-06-27 18:17:01',
-       'timestamp_desc': definitions.TIME_DESCRIPTION_CHANGE},
+       'timestamp_desc': definitions.TIME_DESCRIPTION_METADATA_MODIFICATION},
       {'data_type': 'test:event',
        'filename': 'log/syslog.1',
        'hostname': 'ubuntu',
@@ -49,7 +49,7 @@ class FieldFormattingHelperTest(test_lib.OutputModuleTestCase):
            'Reporter <CRON> PID: 8442 (pam_unix(cron:session): session\n '
            'closed for user root)'),
        'timestamp': '2012-06-27 20:17:01',
-       'timestamp_desc': definitions.TIME_DESCRIPTION_CHANGE}]
+       'timestamp_desc': definitions.TIME_DESCRIPTION_METADATA_MODIFICATION}]
 
   def testFormatDateTime(self):
     """Tests the _FormatDateTime function with dynamic time."""
@@ -301,6 +301,11 @@ class FieldFormattingHelperTest(test_lib.OutputModuleTestCase):
   def testFormatSource(self):
     """Tests the _FormatSource function."""
     output_mediator = self._CreateOutputMediator()
+
+    formatters_directory_path = self._GetTestFilePath(['formatters'])
+    output_mediator.ReadMessageFormattersFromDirectory(
+        formatters_directory_path)
+
     test_helper = formatting_helper.FieldFormattingHelper()
 
     event, event_data, event_data_stream = (
@@ -314,6 +319,11 @@ class FieldFormattingHelperTest(test_lib.OutputModuleTestCase):
   def testFormatSourceShort(self):
     """Tests the _FormatSourceShort function."""
     output_mediator = self._CreateOutputMediator()
+
+    formatters_directory_path = self._GetTestFilePath(['formatters'])
+    output_mediator.ReadMessageFormattersFromDirectory(
+        formatters_directory_path)
+
     test_helper = formatting_helper.FieldFormattingHelper()
 
     event, event_data, event_data_stream = (

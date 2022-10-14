@@ -21,7 +21,6 @@ class OpenSearchOutputArgumentsHelperTest(
 
   _EXPECTED_OUTPUT = """\
 usage: cli_helper.py [--index_name NAME] [--flush_interval INTERVAL]
-                     [--additional_fields ADDITIONAL_FIELDS]
                      [--opensearch-server HOSTNAME] [--opensearch-port PORT]
                      [--opensearch-user USERNAME]
                      [--opensearch-password PASSWORD]
@@ -32,11 +31,6 @@ usage: cli_helper.py [--index_name NAME] [--flush_interval INTERVAL]
 Test argument parser.
 
 {0:s}:
-  --additional_fields ADDITIONAL_FIELDS, --additional-fields ADDITIONAL_FIELDS
-                        Defines extra fields to be included in the output, in
-                        addition to the default fields, which are datetime,
-                        display_name, message, source_long, source_short, tag,
-                        timestamp, timestamp_desc.
   --ca_certificates_file_path PATH, --ca-certificates-file-path PATH
                         Path to a file containing a list of root certificates
                         to trust.
@@ -82,8 +76,7 @@ Test argument parser.
     options = cli_test_lib.TestOptions()
     options._data_location = 'data'
 
-    output_mediator = self._CreateOutputMediator()
-    output_module = opensearch.OpenSearchOutputModule(output_mediator)
+    output_module = opensearch.OpenSearchOutputModule()
     opensearch_output.OpenSearchOutputArgumentsHelper.ParseOptions(
         options, output_module)
 

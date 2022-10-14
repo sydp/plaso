@@ -97,6 +97,10 @@ class TestMRUListStringWindowsRegistryPlugin(test_lib.RegistryPluginTestCase):
     plugin = mrulist.MRUListStringWindowsRegistryPlugin()
     storage_writer = self._ParseKeyWithPlugin(registry_key, plugin)
 
+    number_of_event_data = storage_writer.GetNumberOfAttributeContainers(
+        'event_data')
+    self.assertEqual(number_of_event_data, 1)
+
     number_of_events = storage_writer.GetNumberOfAttributeContainers('event')
     self.assertEqual(number_of_events, 1)
 
@@ -111,8 +115,8 @@ class TestMRUListStringWindowsRegistryPlugin(test_lib.RegistryPluginTestCase):
     events = list(storage_writer.GetEvents())
 
     expected_event_values = {
-        'date_time': '2012-08-28 09:23:49.0020310',
         'data_type': 'windows:registry:mrulist',
+        'date_time': '2012-08-28T09:23:49.0020310+00:00',
         'entries': (
             'Index: 1 [MRU Value a]: Some random text here '
             'Index: 2 [MRU Value c]: C:/looks_legit.exe '
@@ -193,6 +197,10 @@ class TestMRUListShellItemListWindowsRegistryPlugin(
     plugin = mrulist.MRUListShellItemListWindowsRegistryPlugin()
     storage_writer = self._ParseKeyWithPlugin(registry_key, plugin)
 
+    number_of_event_data = storage_writer.GetNumberOfAttributeContainers(
+        'event_data')
+    self.assertEqual(number_of_event_data, 5)
+
     number_of_events = storage_writer.GetNumberOfAttributeContainers('event')
     self.assertEqual(number_of_events, 5)
 
@@ -204,30 +212,32 @@ class TestMRUListShellItemListWindowsRegistryPlugin(
         'recovery_warning')
     self.assertEqual(number_of_warnings, 0)
 
-    events = list(storage_writer.GetEvents())
-
-    # A MRUList event.
+    # MRUList event data.
     expected_event_values = {
-        'date_time': '2012-08-28 09:23:49.0020310',
         'data_type': 'windows:registry:mrulist',
         'entries': (
             'Index: 1 [MRU Value a]: Shell item path: <My Computer> '
             'C:\\Winnt\\Profiles\\Administrator\\Desktop'),
+        'last_written_time': '2012-08-28T09:23:49.0020310+00:00',
         # This should just be the plugin name, as we're invoking it directly,
         # and not through the parser.
         'parser': plugin.NAME}
 
-    self.CheckEventValues(storage_writer, events[4], expected_event_values)
+    event_data = storage_writer.GetAttributeContainerByIndex('event_data', 4)
+    self.CheckEventData(event_data, expected_event_values)
 
-    # A shell item event.
+    # Shell item event data.
     expected_event_values = {
-        'date_time': '2011-01-14 12:03:52',
+        'access_time': None,
+        'creation_time': None,
         'data_type': 'windows:shell_item:file_entry',
+        'modification_time': '2011-01-14T12:03:52+00:00',
         'name': 'Winnt',
         'origin': key_path,
         'shell_item_path': '<My Computer> C:\\Winnt'}
 
-    self.CheckEventValues(storage_writer, events[0], expected_event_values)
+    event_data = storage_writer.GetAttributeContainerByIndex('event_data', 0)
+    self.CheckEventData(event_data, expected_event_values)
 
 
 if __name__ == '__main__':

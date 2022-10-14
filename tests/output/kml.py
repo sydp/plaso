@@ -53,12 +53,12 @@ class KMLEventFormattingHelper(test_lib.OutputModuleTestCase):
   def testGetFormattedEvent(self):
     """Tests the GetFormattedEvent function."""
     output_mediator = self._CreateOutputMediator()
-    event_formatting_helper = kml.KMLEventFormattingHelper(output_mediator)
+    event_formatting_helper = kml.KMLEventFormattingHelper()
 
     event, event_data, event_data_stream = (
         containers_test_lib.CreateEventFromValues(self._TEST_EVENTS[1]))
     event_string = event_formatting_helper.GetFormattedEvent(
-        event, event_data, event_data_stream, None)
+        output_mediator, event, event_data, event_data_stream, None)
 
     event_identifier = event.GetIdentifier()
     event_identifier_string = event_identifier.CopyToString()
@@ -147,10 +147,10 @@ class KMLOutputTest(test_lib.OutputModuleTestCase):
     test_file_object = io.StringIO()
 
     output_mediator = self._CreateOutputMediator()
-    output_module = kml.KMLOutputModule(output_mediator)
+    output_module = kml.KMLOutputModule()
     output_module._file_object = test_file_object
 
-    output_module.WriteHeader()
+    output_module.WriteHeader(output_mediator)
 
     expected_header = (
         '<?xml version="1.0" encoding="utf-8"?>'
@@ -163,8 +163,7 @@ class KMLOutputTest(test_lib.OutputModuleTestCase):
     """Tests the WriteFooter function."""
     test_file_object = io.StringIO()
 
-    output_mediator = self._CreateOutputMediator()
-    output_module = kml.KMLOutputModule(output_mediator)
+    output_module = kml.KMLOutputModule()
     output_module._file_object = test_file_object
 
     output_module.WriteFooter()
@@ -178,12 +177,13 @@ class KMLOutputTest(test_lib.OutputModuleTestCase):
     test_file_object = io.StringIO()
 
     output_mediator = self._CreateOutputMediator()
-    output_module = kml.KMLOutputModule(output_mediator)
+    output_module = kml.KMLOutputModule()
     output_module._file_object = test_file_object
 
     event, event_data, event_data_stream = (
         containers_test_lib.CreateEventFromValues(self._TEST_EVENTS[0]))
-    output_module.WriteEventBody(event, event_data, event_data_stream, None)
+    output_module.WriteEventBody(
+        output_mediator, event, event_data, event_data_stream, None)
 
     event_body = test_file_object.getvalue()
     self.assertEqual(event_body, '')
@@ -192,12 +192,13 @@ class KMLOutputTest(test_lib.OutputModuleTestCase):
     test_file_object = io.StringIO()
 
     output_mediator = self._CreateOutputMediator()
-    output_module = kml.KMLOutputModule(output_mediator)
+    output_module = kml.KMLOutputModule()
     output_module._file_object = test_file_object
 
     event, event_data, event_data_stream = (
         containers_test_lib.CreateEventFromValues(self._TEST_EVENTS[1]))
-    output_module.WriteEventBody(event, event_data, event_data_stream, None)
+    output_module.WriteEventBody(
+        output_mediator, event, event_data, event_data_stream, None)
 
     event_body = test_file_object.getvalue()
 

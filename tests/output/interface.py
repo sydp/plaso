@@ -17,19 +17,17 @@ from tests.output import test_lib
 class TestXMLEventFormattingHelper(formatting_helper.EventFormattingHelper):
   """XML output module event formatting helper for testing."""
 
-  def __init__(self, output_mediator):
-    """Initializes a dynamic selected delimiter separated values output module.
-
-    Args:
-      output_mediator (OutputMediator): an output mediator.
-    """
-    super(TestXMLEventFormattingHelper, self).__init__(output_mediator)
+  def __init__(self):
+    """Initializes a XML event formatting helper."""
+    super(TestXMLEventFormattingHelper, self).__init__()
     self._field_formatting_helper = formatting_helper.FieldFormattingHelper()
 
-  def GetFormattedEvent(self, event, event_data, event_data_stream, event_tag):
+  def GetFormattedEvent(
+      self, output_mediator, event, event_data, event_data_stream, event_tag):
     """Retrieves a string representation of the event.
 
     Args:
+      output_mediator (OutputMediator): output mediator.
       event (EventObject): event.
       event_data (EventData): event data.
       event_data_stream (EventDataStream): event data stream.
@@ -40,7 +38,7 @@ class TestXMLEventFormattingHelper(formatting_helper.EventFormattingHelper):
     """
     # pylint: disable=protected-access
     date_time_string = self._field_formatting_helper._FormatDateTime(
-        self._output_mediator, event, event_data, event_data_stream)
+        output_mediator, event, event_data, event_data_stream)
 
     return (
         '<Event>\n'
@@ -59,8 +57,13 @@ class TestXMLOutputModule(interface.TextFileOutputModule):
     """Writes the footer to the output."""
     self.WriteLine('</EventFile>')
 
-  def WriteHeader(self):
-    """Writes the header to the output."""
+  def WriteHeader(self, output_mediator):
+    """Writes the header to the output.
+
+    Args:
+      output_mediator (OutputMediator): mediates interactions between output
+          modules and other components, such as storage and dfVFS.
+    """
     self.WriteLine('<EventFile>')
 
 
@@ -92,17 +95,17 @@ class TextFileOutputModuleTest(test_lib.OutputModuleTestCase):
     test_file_object = io.StringIO()
 
     output_mediator = self._CreateOutputMediator()
-    event_formatting_helper = TestXMLEventFormattingHelper(output_mediator)
-    output_module = TestXMLOutputModule(
-        output_mediator, event_formatting_helper)
+    event_formatting_helper = TestXMLEventFormattingHelper()
+    output_module = TestXMLOutputModule(event_formatting_helper)
     output_module._file_object = test_file_object
 
-    output_module.WriteHeader()
+    output_module.WriteHeader(output_mediator)
 
     for event_values in self._TEST_EVENTS:
       event, event_data, event_data_stream = (
           containers_test_lib.CreateEventFromValues(event_values))
-      output_module.WriteEvent(event, event_data, event_data_stream, None)
+      output_module.WriteEvent(
+          output_mediator, event, event_data, event_data_stream, None)
 
     output_module.WriteFooter()
 

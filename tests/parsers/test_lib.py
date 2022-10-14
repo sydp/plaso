@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 """Parser related functions and classes for testing."""
 
+from dfdatetime import interface as dfdatetime_interface
 from dfdatetime import posix_time as dfdatetime_posix_time
+from dfdatetime import semantic_time as dfdatetime_semantic_time
 
 from dfvfs.file_io import fake_file_io
 from dfvfs.lib import definitions as dfvfs_definitions
@@ -10,8 +12,11 @@ from dfvfs.path import fake_path_spec
 from dfvfs.resolver import context as dfvfs_context
 from dfvfs.resolver import resolver as path_spec_resolver
 
+from plaso.containers import event_registry
 from plaso.containers import events
+from plaso.containers import time_events
 from plaso.engine import knowledge_base
+from plaso.lib import definitions
 from plaso.parsers import interface
 from plaso.parsers import mediator as parsers_mediator
 from plaso.storage.fake import writer as fake_writer
@@ -78,7 +83,8 @@ class ParserTestCase(shared_test_lib.BaseTestCase):
       parser_mediator.SetFileEntry(file_entry)
 
     if parser_chain:
-      parser_mediator.parser_chain = parser_chain
+      # AppendToParserChain needs to be run after SetFileEntry.
+      parser_mediator.AppendToParserChain(parser_chain)
 
     return parser_mediator
 
@@ -105,6 +111,44 @@ class ParserTestCase(shared_test_lib.BaseTestCase):
     event_data_identifier = event.GetEventDataIdentifier()
     return storage_writer.GetAttributeContainerByIdentifier(
         events.EventData.CONTAINER_TYPE, event_data_identifier)
+
+  def _ProcessEventData(self, storage_writer):
+    """Processes event data.
+
+    Args:
+      storage_writer (StorageWriter): storage writer.
+    """
+    event_data = storage_writer.GetFirstWrittenEventData()
+    while event_data:
+      attribute_mappings = (
+            event_registry.EventDataRegistry.GetAttributeMappings(
+                event_data.data_type))
+      if attribute_mappings:
+        event_data_identifier = event_data.GetIdentifier()
+
+        number_of_events = 0
+        for attribute_name, time_description in attribute_mappings.items():
+          attribute_value = getattr(event_data, attribute_name, None)
+          if attribute_value:
+            event = time_events.DateTimeValuesEvent(
+                attribute_value, time_description)
+            event.SetEventDataIdentifier(event_data_identifier)
+
+            storage_writer.AddAttributeContainer(event)
+            number_of_events += 1
+
+        # Create a place holder event for event_data without date and time
+        # values to map.
+        # TODO: add extraction option to control this behavior.
+        if not number_of_events:
+          date_time = dfdatetime_semantic_time.NotSet()
+          event = time_events.DateTimeValuesEvent(
+              date_time, definitions.TIME_DESCRIPTION_NOT_A_TIME)
+          event.SetEventDataIdentifier(event_data_identifier)
+
+          storage_writer.AddAttributeContainer(event)
+
+      event_data = storage_writer.GetNextWrittenEventData()
 
   def _ParseFile(
       self, path_segments, parser, collection_filters_helper=None,
@@ -166,9 +210,33 @@ class ParserTestCase(shared_test_lib.BaseTestCase):
       parser.Parse(parser_mediator, file_object)
 
     else:
-      self.fail('Got unsupported parser type: {0!s}'.format(type(parser)))
+      parser_type = type(parser)
+      self.fail('Unsupported parser type: {0!s}'.format(parser_type))
+
+    self._ProcessEventData(storage_writer)
 
     return storage_writer
+
+  def CheckEventData(self, event_data, expected_event_values):
+    """Asserts that event data matches the expected values.
+
+    Args:
+      event_data (EventData): event data to check.
+      expected_event_values (dict[str, list[str]): expected values of the event
+          data attribute values per name.
+    """
+    for name, expected_value in expected_event_values.items():
+      value = getattr(event_data, name, None)
+      if isinstance(value, dfdatetime_interface.DateTimeValues):
+        date_time_value = value.CopyToDateTimeStringISO8601()
+        if not date_time_value:
+          # Call CopyToDateTimeString to support semantic date time values.
+          date_time_value = value.CopyToDateTimeString()
+        value = date_time_value
+
+      error_message = (
+          'event value: "{0:s}" does not match expected value').format(name)
+      self.assertEqual(value, expected_value, error_message)
 
   def CheckEventValues(self, storage_writer, event, expected_event_values):
     """Asserts that an event and its event data matches the expected values.
@@ -196,7 +264,11 @@ class ParserTestCase(shared_test_lib.BaseTestCase):
         value = getattr(event_data, name, None)
 
       if name == 'date_time' and value and isinstance(expected_value, str):
-        value = value.CopyToDateTimeString()
+        date_time_value = value.CopyToDateTimeStringISO8601()
+        if not date_time_value:
+          # Call CopyToDateTimeString to support semantic date time values.
+          date_time_value = value.CopyToDateTimeString()
+        value = date_time_value
 
       error_message = (
           'event value: "{0:s}" does not match expected value').format(name)

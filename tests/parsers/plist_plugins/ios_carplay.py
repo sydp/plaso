@@ -1,27 +1,28 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Tests for the Software Update plist plugin."""
+"""Tests for the Apple iOS Car Play application plist plugin."""
 
 import unittest
 
-from plaso.parsers.plist_plugins import softwareupdate
+from plaso.lib import definitions
+from plaso.parsers.plist_plugins import ios_carplay
 
 from tests.parsers.plist_plugins import test_lib
 
 
-class SoftwareUpdatePluginTest(test_lib.PlistPluginTestCase):
-  """Tests for the SoftwareUpdate plist plugin."""
+class IOSCarPlayPlistPluginTest(test_lib.PlistPluginTestCase):
+  """Tests for the Apple iOS Car Play application plist plugin."""
 
   def testProcess(self):
     """Tests the Process function."""
-    plist_name = 'com.apple.SoftwareUpdate.plist'
+    plist_name = 'com.apple.CarPlayApp.plist'
 
-    plugin = softwareupdate.SoftwareUpdatePlugin()
+    plugin = ios_carplay.IOSCarPlayPlistPlugin()
     storage_writer = self._ParsePlistFileWithPlugin(
         plugin, [plist_name], plist_name)
 
     number_of_events = storage_writer.GetNumberOfAttributeContainers('event')
-    self.assertEqual(number_of_events, 2)
+    self.assertEqual(number_of_events, 5)
 
     number_of_warnings = storage_writer.GetNumberOfAttributeContainers(
         'extraction_warning')
@@ -36,22 +37,10 @@ class SoftwareUpdatePluginTest(test_lib.PlistPluginTestCase):
     events = list(storage_writer.GetSortedEvents())
 
     expected_event_values = {
-        'data_type': 'plist:key',
-        'date_time': '2014-01-06 17:43:48.000000',
-        'desc': (
-            'Last Mac OS 10.9.1 (13B42) partially '
-            'update, pending 1: RAWCameraUpdate5.03(031-2664).'),
-        'key': '',
-        'root': '/'}
-
-    self.CheckEventValues(storage_writer, events[1], expected_event_values)
-
-    expected_event_values = {
-        'data_type': 'plist:key',
-        'date_time': '2014-01-06 17:43:48.000000',
-        'desc': 'Last MacOS 10.9.1 (13B42) full update.',
-        'key': '',
-        'root': '/'}
+        'application_identifier': 'com.apple.mobilecal',
+        'data_type': 'ios:carplay:history:entry',
+        'date_time': '2020-04-12T13:55:51.255235072+00:00',
+        'timestamp_desc': definitions.TIME_DESCRIPTION_LAST_USED}
 
     self.CheckEventValues(storage_writer, events[0], expected_event_values)
 

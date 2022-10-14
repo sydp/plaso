@@ -19,6 +19,9 @@ class XLSXOutputModule(interface.OutputModule):
   NAME = 'xlsx'
   DESCRIPTION = 'Excel Spreadsheet (XLSX) output'
 
+  SUPPORTS_ADDITIONAL_FIELDS = True
+  SUPPORTS_CUSTOM_FIELDS = True
+
   WRITES_OUTPUT_FILE = True
 
   _DEFAULT_FIELDS = [
@@ -35,29 +38,27 @@ class XLSXOutputModule(interface.OutputModule):
       r'[\x00-\x08\x0b-\x1f\x7f-\x84\x86-\x9f\ud800-\udfff\ufdd0-\ufddf'
       r'\ufffe-\uffff]'))
 
-  def __init__(self, output_mediator):
-    """Initializes an Excel Spreadsheet (XLSX) output module.
-
-    Args:
-      output_mediator (OutputMediator): mediates interactions between output
-          modules and other components, such as storage and dfvfs.
-    """
-    super(XLSXOutputModule, self).__init__(output_mediator)
+  def __init__(self):
+    """Initializes an output module."""
+    super(XLSXOutputModule, self).__init__()
     self._column_widths = []
     self._current_row = 0
+    self._custom_fields = {}
     self._field_formatting_helper = dynamic.DynamicFieldFormattingHelper()
-    self._fields = self._DEFAULT_FIELDS
+    self._field_names = self._DEFAULT_FIELDS
     self._sheet = None
     self._timestamp_format = self._DEFAULT_TIMESTAMP_FORMAT
     self._workbook = None
 
-  def _FormatDateTime(self, event, event_data):  # pylint: disable=missing-return-type-doc
+  def _FormatDateTime(self, output_mediator, event, event_data):  # pylint: disable=missing-return-type-doc
     """Formats the date to a datetime object without timezone information.
 
     Note: timezone information must be removed due to lack of support
     by xlsxwriter and Excel.
 
     Args:
+      output_mediator (OutputMediator): mediates interactions between output
+          modules and other components, such as storage and dfVFS.
       event (EventObject): event.
       event_data (EventData): event data.
 
@@ -69,7 +70,7 @@ class XLSXOutputModule(interface.OutputModule):
       datetime_object = datetime.datetime(
           1970, 1, 1, 0, 0, 0, 0, tzinfo=pytz.UTC)
       datetime_object += datetime.timedelta(microseconds=event.timestamp)
-      datetime_object.astimezone(self._output_mediator.timezone)
+      datetime_object.astimezone(output_mediator.timezone)
 
       return datetime_object.replace(tzinfo=None)
 
@@ -130,13 +131,31 @@ class XLSXOutputModule(interface.OutputModule):
     self._sheet = self._workbook.add_worksheet('Sheet')
     self._current_row = 0
 
-  def SetFields(self, fields):
-    """Sets the fields to output.
+  def SetAdditionalFields(self, field_names):
+    """Sets the names of additional fields to output.
 
     Args:
-      fields (list[str]): names of the fields to output.
+      field_names (list[str]): names of additional fields to output.
     """
-    self._fields = fields
+    self._field_names.extend(field_names)
+
+  def SetCustomFields(self, field_names_and_values):
+    """Sets the names and values of custom fields to output.
+
+    Args:
+      field_names_and_values (list[tuple[str, str]]): names and values of
+          custom fields to output.
+    """
+    self._custom_fields = dict(field_names_and_values)
+    self._field_names.extend(self._custom_fields.keys())
+
+  def SetFields(self, field_names):
+    """Sets the names of the fields to output.
+
+    Args:
+      field_names (list[str]): names of the fields to output.
+    """
+    self._field_names = field_names
 
   def SetTimestampFormat(self, timestamp_format):
     """Set the timestamp format to use for the datetime column.
@@ -146,31 +165,40 @@ class XLSXOutputModule(interface.OutputModule):
     """
     self._timestamp_format = timestamp_format
 
-  def WriteEventBody(self, event, event_data, event_data_stream, event_tag):
+  def WriteEventBody(
+      self, output_mediator, event, event_data, event_data_stream, event_tag):
     """Writes event values to the output.
 
     Args:
+      output_mediator (OutputMediator): mediates interactions between output
+          modules and other components, such as storage and dfVFS.
       event (EventObject): event.
       event_data (EventData): event data.
       event_data_stream (EventDataStream): event data stream.
       event_tag (EventTag): event tag.
     """
-    for column_index, field_name in enumerate(self._fields):
+    for column_index, field_name in enumerate(self._field_names):
       if field_name == 'datetime':
-        field_value = self._FormatDateTime(event, event_data)
+        field_value = self._FormatDateTime(output_mediator, event, event_data)
 
       else:
         field_value = self._field_formatting_helper.GetFormattedField(
-            self._output_mediator, field_name, event, event_data,
-            event_data_stream, event_tag)
-        field_value = self._SanitizeField(field_value)
+            output_mediator, field_name, event, event_data, event_data_stream,
+            event_tag)
 
-      if (field_name == 'datetime' and
-          isinstance(field_value, datetime.datetime)):
+      if field_value is None and field_name in self._custom_fields:
+        field_value = self._custom_fields.get(field_name, None)
+
+      if field_value is None:
+        field_value = '-'
+
+      if isinstance(field_value, datetime.datetime):
         self._sheet.write_datetime(
             self._current_row, column_index, field_value)
         column_width = len(self._timestamp_format) + 2
       else:
+        field_value = self._SanitizeField(field_value)
+
         self._sheet.write(self._current_row, column_index, field_value)
         column_width = len(field_value) + 2
 
@@ -183,20 +211,25 @@ class XLSXOutputModule(interface.OutputModule):
 
     self._current_row += 1
 
-  def WriteHeader(self):
-    """Writes the header to the spreadsheet."""
+  def WriteHeader(self, output_mediator):
+    """Writes the header to the spreadsheet.
+
+    Args:
+      output_mediator (OutputMediator): mediates interactions between output
+          modules and other components, such as storage and dfVFS.
+    """
     cell_format = self._workbook.add_format({'bold': True})
     cell_format.set_align('center')
 
     self._column_widths = []
-    for column_index, field_name in enumerate(self._fields):
+    for column_index, field_name in enumerate(self._field_names):
       self._sheet.write(0, column_index, field_name, cell_format)
 
       column_width = len(field_name) + 2
       self._column_widths.append(column_width)
 
     self._current_row = 1
-    self._sheet.autofilter(0, len(self._fields) - 1, 0, 0)
+    self._sheet.autofilter(0, len(self._field_names) - 1, 0, 0)
     self._sheet.freeze_panes(1, 0)
 
 

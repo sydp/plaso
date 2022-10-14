@@ -34,6 +34,7 @@ from plaso.parsers import opera
 from plaso.parsers import pe
 from plaso.parsers import plist
 from plaso.parsers import pls_recall
+from plaso.parsers import postgresql
 from plaso.parsers import recycler
 from plaso.parsers import safari_cookies
 from plaso.parsers import sccm
@@ -47,6 +48,7 @@ from plaso.parsers import text_parser
 from plaso.parsers import trendmicroav
 from plaso.parsers import utmp
 from plaso.parsers import utmpx
+from plaso.parsers import viminfo
 from plaso.parsers import windefender_history
 from plaso.parsers import winevt
 from plaso.parsers import winevtx

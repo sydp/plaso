@@ -11,6 +11,8 @@ short_message:
 - 'Action: {action}'
 - 'Container Name: {container_name}'
 - 'Container ID: {container_id}'
+short_source: 'DOCKER'
+source: 'Docker Container'
 ---
 type: 'conditional'
 data_type: 'docker:json:container:log'
@@ -23,6 +25,8 @@ short_message:
 - 'Text: {log_line}'
 - 'Container ID: {container_id}'
 - 'Source: {log_source}'
+short_source: 'DOCKER'
+source: 'Docker Container Log'
 ---
 type: 'conditional'
 data_type: 'docker:json:layer'
@@ -33,11 +37,15 @@ separator: ', '
 short_message:
 - 'Command: {command}'
 - 'Layer ID: {layer_id}'
+short_source: 'DOCKER'
+source: 'Docker Layer'
 ---
 type: 'basic'
 data_type: 'fs:mactime:line'
 message: '{filename}'
 short_message: '{filename}'
+short_source: 'FILE'
+source: 'Mactime Bodyfile'
 ---
 type: 'conditional'
 data_type: 'ios:mobile_installation:line'
@@ -46,6 +54,22 @@ message:
 - 'Body: {body}'
 short_message:
 - 'Body: {body}'
+short_source: 'LOG'
+source: 'iOS sysdiag log'
+---
+type: 'conditional'
+data_type: 'pe'
+message:
+- 'PE Type: {pe_type}'
+- '[{pe_attribute}]'
+- 'DLL name: {dll_name}'
+- 'Import hash: {imphash}'
+short_message:
+- '{pe_type}'
+- '[{pe_attribute}]'
+- '{dll_name}'
+short_source: 'PE'
+source: 'PE Event'
 ---
 type: 'conditional'
 data_type: 'pe:compilation:compilation_time'
@@ -54,6 +78,8 @@ message:
 - 'Import hash: {imphash}'
 short_message:
 - 'pe_type'
+short_source: 'PE'
+source: 'PE Compilation time'
 ---
 type: 'conditional'
 data_type: 'pe:delay_import:import_time'
@@ -63,6 +89,8 @@ message:
 - 'Import hash: {imphash}'
 short_message:
 - '{dll_name}'
+short_source: 'PE'
+source: 'PE Delay Import Table'
 ---
 type: 'conditional'
 data_type: 'pe:export_table'
@@ -72,6 +100,8 @@ message:
 - 'Import hash: {imphash}'
 short_message:
 - '{dll_name}'
+short_source: 'PE'
+source: 'PE Export Table'
 ---
 type: 'conditional'
 data_type: 'pe:import:import_time'
@@ -81,6 +111,8 @@ message:
 - 'Import hash: {imphash}'
 short_message:
 - '{dll_name}'
+short_source: 'PE'
+source: 'PE Import Table'
 ---
 type: 'conditional'
 data_type: 'pe:load_config:modification_time'
@@ -89,6 +121,8 @@ message:
 - 'Import hash: {imphash}'
 short_message:
 - 'pe_type'
+short_source: 'PE'
+source: 'PE Load Configuration Table'
 ---
 type: 'conditional'
 data_type: 'pe:resource:creation_time'
@@ -97,3 +131,5 @@ message:
 - 'Import hash: {imphash}'
 short_message:
 - 'pe_type'
+short_source: 'PE'
+source: 'PE Resource Creation Time'

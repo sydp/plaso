@@ -10,6 +10,8 @@ message:
 short_message:
 - 'Accessor Identifier: {accessor_identifier}'
 - 'Resource Category: {resource_category}'
+short_source: 'LOG'
+source: 'iOS application privacy report'
 ---
 type: 'conditional'
 data_type: 'ios:app_privacy:network'
@@ -18,6 +20,17 @@ message:
 - 'Domain: {domain}'
 short_message:
 - 'Bundle Identifier: {bundle_identifier}'
+short_source: 'LOG'
+source: 'iOS application privacy report'
+---
+type: 'conditional'
+data_type: 'ios:carplay:history:entry'
+message:
+- 'Application identifier: {application_identifier}'
+short_message:
+- 'Application identifier: {application_identifier}'
+short_source: 'PLIST'
+source: 'Apple iOS Car Play application plist'
 ---
 type: 'conditional'
 data_type: 'ios:kik:messaging'
@@ -53,6 +66,8 @@ message:
 - 'Message: {body}'
 short_message:
 - '{body}'
+short_source: 'Kik iOS'
+source: 'Kik iOS messages'
 ---
 type: 'conditional'
 data_type: 'ios:lockdown:log:line'
@@ -61,6 +76,8 @@ message:
 - 'Process Identifer: {process_identifier}'
 short_message:
 - 'Body: {body}'
+short_source: 'LOG'
+source: 'iOS lockdown daemon log'
 ---
 type: 'conditional'
 data_type: 'ios:sysdiag:log:line'
@@ -69,6 +86,8 @@ message:
 - 'Body: {body}'
 short_message:
 - 'Body: {body}'
+short_source: 'LOG'
+source: 'iOS sysdiag log'
 ---
 type: 'conditional'
 data_type: 'ios:netusage:route'
@@ -88,6 +107,8 @@ message:
 short_message:
 - 'Network Identifier: {network_identifier}'
 - 'Network Type: {network_type}'
+short_source: 'HISTORY'
+source: 'iOS netusage.sqlite database'
 ---
 type: 'conditional'
 data_type: 'ios:netusage:process'
@@ -101,6 +122,8 @@ message:
 - 'Wireless Wan Out: {wireless_wan_out}'
 short_message:
 - 'Process Name: {process_name}'
+short_source: 'HISTORY'
+source: 'iOS netusage.sqlite database'
 ---
 type: 'conditional'
 data_type: 'ios:powerlog:application_usage'
@@ -110,6 +133,8 @@ message:
 - 'On Screen Time: {screen_on_time}'
 short_message:
 - 'Application: {bundle_identifier}'
+short_source: 'HISTORY'
+source: 'iOS powerlog database'
 ---
 type: 'conditional'
 data_type: 'ios:screentime:event'
@@ -124,6 +149,8 @@ message:
 short_message:
 - 'Bundle Identifier: {bundle_identifier}'
 - 'Domain: {domain}'
+short_source: 'HISTORY'
+source: 'iOS Screen Time database'
 ---
 type: 'conditional'
 data_type: 'ios:sysdiagnose:logd:line'
@@ -132,6 +159,8 @@ message:
 - 'Body: {body}'
 short_message:
 - 'Body: {body}'
+short_source: 'LOG'
+source: 'iOS sysdiagnose log'
 ---
 type: 'conditional'
 data_type: 'twitter:ios:contact'
@@ -156,6 +185,8 @@ short_message:
 - 'Screen name: {screen_name}'
 - 'Description: {description}'
 - 'URL: {url}'
+short_source: 'Twitter iOS'
+source: 'Twitter Android Contacts'
 ---
 type: 'conditional'
 data_type: 'twitter:ios:status'
@@ -176,3 +207,5 @@ message:
 short_message:
 - 'Name: {name}'
 - 'Message: {text}'
+short_source: 'Twitter iOS'
+source: 'Twitter Android Status'

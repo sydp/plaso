@@ -75,21 +75,21 @@ class EventExtractionWorkerTest(shared_test_lib.BaseTestCase):
         dfvfs_definitions.TYPE_INDICATOR_OS, location=test_file_path)
 
   def _TestProcessPathSpec(
-      self, storage_writer, path_spec, expected_event_counters,
-      extraction_worker=None, knowledge_base_values=None,
-      process_archives=False):
+      self, storage_writer, path_spec, expected_event_data_counts,
+      archive_types_string=None, extraction_worker=None,
+      knowledge_base_values=None):
     """Tests processing a path specification.
 
     Args:
       storage_writer (StorageWriter): storage writer.
       path_spec (dfvfs.PathSpec): path specification.
-      expected_event_counters (dict[str, int|list[int]]): expected event
-          counters per event data type.
+      expected_event_data_counts (dict[str, int|list[int]]): expected counts
+          of number of event data containers per data type.
+      archive_types_string (Optional[str]): comma separated archive types for
+          which embedded file entries should be processed.
       extraction_worker (Optional[EventExtractorWorker]): worker to process the
           path specification. If None, a new worker will be created.
       knowledge_base_values (Optional[dict]): knowledge base values.
-      process_archives (Optional[bool]): whether archive files should be
-          processed.
     """
     session = sessions.Session()
 
@@ -105,7 +105,7 @@ class EventExtractionWorkerTest(shared_test_lib.BaseTestCase):
 
     if not extraction_worker:
       configuration = configurations.ExtractionConfiguration()
-      configuration.process_archives = process_archives
+      configuration.archive_types_string = archive_types_string
 
       extraction_worker = worker.EventExtractionWorker()
       extraction_worker.SetExtractionConfiguration(configuration)
@@ -126,29 +126,25 @@ class EventExtractionWorkerTest(shared_test_lib.BaseTestCase):
       session_completion = session.CreateSessionCompletion()
       storage_writer.AddAttributeContainer(session_completion)
 
-      if expected_event_counters:
-        self.CheckEventCounters(storage_writer, expected_event_counters)
+      if expected_event_data_counts:
+        self.CheckEventDataCounts(storage_writer, expected_event_data_counts)
 
     finally:
       storage_writer.Close()
 
-  def CheckEventCounters(self, storage_writer, expected_event_counters):
+  def CheckEventDataCounts(self, storage_writer, expected_event_data_counts):
     """Asserts that the number of events per data type matches.
 
     Args:
       storage_writer (FakeStorageWriter): storage writer.
-      expected_event_counters (dict[str, int|list[int]]): expected event
-          counters per event data type.
+      expected_event_data_counts (dict[str, int|list[int]]): expected counts
+          of number of event data containers per data type.
     """
     event_counters = collections.Counter()
-    for event in storage_writer.GetSortedEvents():
-      event_data_identifier = event.GetEventDataIdentifier()
-      event_data = storage_writer.GetAttributeContainerByIdentifier(
-          events.EventData.CONTAINER_TYPE, event_data_identifier)
-
+    for event_data in storage_writer.GetAttributeContainers('event_data'):
       event_counters[event_data.data_type] += 1
 
-    for data_type, expected_event_count in expected_event_counters.items():
+    for data_type, expected_event_count in expected_event_data_counts.items():
       event_count = event_counters.pop(data_type, 0)
       if isinstance(expected_event_count, list):
         self.assertIn(event_count, expected_event_count)
@@ -364,49 +360,6 @@ class EventExtractionWorkerTest(shared_test_lib.BaseTestCase):
 
     # TODO: check results in storage writer
 
-  def testGetArchiveTypes(self):
-    """Tests the _GetArchiveTypes function."""
-    knowledge_base_values = {'year': 2016}
-    session = sessions.Session()
-
-    storage_writer = fake_writer.FakeStorageWriter()
-
-    knowledge_base_object = knowledge_base.KnowledgeBase()
-    if knowledge_base_values:
-      for identifier, value in knowledge_base_values.items():
-        knowledge_base_object.SetValue(identifier, value)
-
-    resolver_context = context.Context()
-    parser_mediator = parsers_mediator.ParserMediator(
-        knowledge_base_object, resolver_context=resolver_context)
-    parser_mediator.SetPreferredYear(2016)
-    parser_mediator.SetStorageWriter(storage_writer)
-
-    extraction_worker = worker.EventExtractionWorker()
-
-    test_analyzer = analyzers_manager_test.TestAnalyzer()
-    self.assertEqual(len(test_analyzer.GetResults()), 0)
-
-    extraction_worker._analyzers = [test_analyzer]
-
-    storage_writer.Open()
-
-    session_start = session.CreateSessionStart()
-    storage_writer.AddAttributeContainer(session_start)
-
-    extraction_worker = worker.EventExtractionWorker()
-
-    path_spec = self._GetTestFilePathSpec(['syslog.tar'])
-
-    type_indicators = extraction_worker._GetArchiveTypes(
-        parser_mediator, path_spec)
-    self.assertEqual(type_indicators, [dfvfs_definitions.TYPE_INDICATOR_TAR])
-
-    session_completion = session.CreateSessionCompletion()
-    storage_writer.AddAttributeContainer(session_completion)
-
-    storage_writer.Close()
-
   def testGetCompressedStreamTypes(self):
     """Tests the _GetCompressedStreamTypes function."""
     knowledge_base_values = {'year': 2016}
@@ -476,15 +429,13 @@ class EventExtractionWorkerTest(shared_test_lib.BaseTestCase):
     path_spec = self._GetTestFilePathSpec(['syslog'])
     storage_writer = fake_writer.FakeStorageWriter()
 
-    # Typically there are 3 filestat events, but there can be 4 on platforms
-    # that support os.stat_result st_birthtime.
-    expected_event_counters = {
-        'fs:stat': [3, 4],
+    expected_event_data_counts = {
+        'fs:stat': 1,
         'syslog:cron:task_run': 3,
         'syslog:line': 13}
 
     self._TestProcessPathSpec(
-        storage_writer, path_spec, expected_event_counters,
+        storage_writer, path_spec, expected_event_data_counts,
         knowledge_base_values=knowledge_base_values)
 
   def testProcessPathSpecCompressedFileGZIP(self):
@@ -494,16 +445,13 @@ class EventExtractionWorkerTest(shared_test_lib.BaseTestCase):
     path_spec = self._GetTestFilePathSpec(['syslog.gz'])
     storage_writer = fake_writer.FakeStorageWriter()
 
-    # Typically there are 3 filestat events, but there can be 4 on platforms
-    # that support os.stat_result st_birthtime. There is 1 additional filestat
-    # event from the .gz file.
-    expected_event_counters = {
-        'fs:stat': [4, 5],
+    expected_event_data_counts = {
+        'fs:stat': 2,
         'syslog:cron:task_run': 3,
         'syslog:line': 9}
 
     self._TestProcessPathSpec(
-        storage_writer, path_spec, expected_event_counters,
+        storage_writer, path_spec, expected_event_data_counts,
         knowledge_base_values=knowledge_base_values)
 
   def testProcessPathSpecCompressedFileBZIP2(self):
@@ -513,15 +461,13 @@ class EventExtractionWorkerTest(shared_test_lib.BaseTestCase):
     path_spec = self._GetTestFilePathSpec(['syslog.bz2'])
     storage_writer = fake_writer.FakeStorageWriter()
 
-    # Typically there are 3 filestat events, but there can be 4 on platforms
-    # that support os.stat_result st_birthtime.
-    expected_event_counters = {
-        'fs:stat': [3, 4],
+    expected_event_data_counts = {
+        'fs:stat': 1,
         'syslog:cron:task_run': 3,
         'syslog:line': 9}
 
     self._TestProcessPathSpec(
-        storage_writer, path_spec, expected_event_counters,
+        storage_writer, path_spec, expected_event_data_counts,
         knowledge_base_values=knowledge_base_values)
 
   def testProcessPathSpecCompressedFileXZ(self):
@@ -531,15 +477,13 @@ class EventExtractionWorkerTest(shared_test_lib.BaseTestCase):
     path_spec = self._GetTestFilePathSpec(['syslog.xz'])
     storage_writer = fake_writer.FakeStorageWriter()
 
-    # Typically there are 3 filestat events, but there can be 4 on platforms
-    # that support os.stat_result st_birthtime.
-    expected_event_counters = {
-        'fs:stat': [3, 4],
+    expected_event_data_counts = {
+        'fs:stat': 1,
         'syslog:cron:task_run': 3,
         'syslog:line': 9}
 
     self._TestProcessPathSpec(
-        storage_writer, path_spec, expected_event_counters,
+        storage_writer, path_spec, expected_event_data_counts,
         knowledge_base_values=knowledge_base_values)
 
   def testProcessPathSpec(self):
@@ -557,43 +501,39 @@ class EventExtractionWorkerTest(shared_test_lib.BaseTestCase):
 
     storage_writer = fake_writer.FakeStorageWriter()
 
-    expected_event_counters = {
+    expected_event_data_counts = {
         'fs:stat': 1,
         'syslog:cron:task_run': 3,
         'syslog:line': 9}
 
     self._TestProcessPathSpec(
-        storage_writer, path_spec, expected_event_counters,
+        storage_writer, path_spec, expected_event_data_counts,
         knowledge_base_values=knowledge_base_values)
 
     # Process an archive file without "process archive files" mode.
     path_spec = self._GetTestFilePathSpec(['syslog.tar'])
     storage_writer = fake_writer.FakeStorageWriter()
 
-    # Typically there are 3 filestat events, but there can be 4 on platforms
-    # that support os.stat_result st_birthtime.
-    expected_event_counters = {
-        'fs:stat': [3, 4]}
+    expected_event_data_counts = {
+        'fs:stat': 1}
 
     self._TestProcessPathSpec(
-        storage_writer, path_spec, expected_event_counters,
+        storage_writer, path_spec, expected_event_data_counts,
         knowledge_base_values=knowledge_base_values)
 
     # Process an archive file with "process archive files" mode.
     path_spec = self._GetTestFilePathSpec(['syslog.tar'])
     storage_writer = fake_writer.FakeStorageWriter()
 
-    # Typically there are 3 filestat events, but there can be 4 on platforms
-    # that support os.stat_result st_birthtime. There is 1 additional filestat
-    # event from the .tar file.
-    expected_event_counters = {
-        'fs:stat': [4, 5],
+    expected_event_data_counts = {
+        'fs:stat': 2,
         'syslog:cron:task_run': 3,
         'syslog:line': 9}
 
     self._TestProcessPathSpec(
-        storage_writer, path_spec, expected_event_counters,
-        knowledge_base_values=knowledge_base_values, process_archives=True)
+        storage_writer, path_spec, expected_event_data_counts,
+        archive_types_string='tar,zip',
+        knowledge_base_values=knowledge_base_values)
 
   def testProcessPathSpecCompressedArchive(self):
     """Tests the ProcessPathSpec function on a compressed archive file."""
@@ -612,30 +552,181 @@ class EventExtractionWorkerTest(shared_test_lib.BaseTestCase):
 
     storage_writer = fake_writer.FakeStorageWriter()
 
-    expected_event_counters = {
+    expected_event_data_counts = {
         'fs:stat': 1,
         'syslog:cron:task_run': 3,
         'syslog:line': 9}
 
     self._TestProcessPathSpec(
-        storage_writer, path_spec, expected_event_counters,
+        storage_writer, path_spec, expected_event_data_counts,
         knowledge_base_values=knowledge_base_values)
 
     # Process an archive file with "process archive files" mode.
     path_spec = self._GetTestFilePathSpec(['syslog.tgz'])
     storage_writer = fake_writer.FakeStorageWriter()
 
-    # Typically there are 3 filestat events, but there can be 4 on platforms
-    # that support os.stat_result st_birthtime. There are 2 additional filestat
-    # events from the .tar and .gz files.
-    expected_event_counters = {
-        'fs:stat': [5, 6],
+    expected_event_data_counts = {
+        'fs:stat': 3,
         'syslog:cron:task_run': 3,
         'syslog:line': 9}
 
     self._TestProcessPathSpec(
-        storage_writer, path_spec, expected_event_counters,
-        knowledge_base_values=knowledge_base_values, process_archives=True)
+        storage_writer, path_spec, expected_event_data_counts,
+        archive_types_string='tar,zip',
+        knowledge_base_values=knowledge_base_values)
+
+  def testProcessPathSpecDMG(self):
+    """Tests the ProcessPathSpec function on a DMG image."""
+    knowledge_base_values = {'year': 2016}
+
+    test_file_path = self._GetTestFilePath(['hfsplus_zlib.dmg'])
+    self._SkipIfPathNotExists(test_file_path)
+
+    path_spec = path_spec_factory.Factory.NewPathSpec(
+        dfvfs_definitions.TYPE_INDICATOR_OS, location=test_file_path)
+    path_spec = path_spec_factory.Factory.NewPathSpec(
+        dfvfs_definitions.TYPE_INDICATOR_MODI, parent=path_spec)
+    path_spec = path_spec_factory.Factory.NewPathSpec(
+        dfvfs_definitions.TYPE_INDICATOR_GPT, location='/p1',
+        parent=path_spec)
+    path_spec = path_spec_factory.Factory.NewPathSpec(
+        dfvfs_definitions.TYPE_INDICATOR_HFS, location='/',
+        parent=path_spec)
+    storage_writer = fake_writer.FakeStorageWriter()
+
+    expected_event_data_counts = {
+        'fs:stat': 7}
+
+    self._TestProcessPathSpec(
+        storage_writer, path_spec, expected_event_data_counts,
+        knowledge_base_values=knowledge_base_values)
+
+  def testProcessPathSpecTarWithDMG(self):
+    """Tests the ProcessPathSpec function on a TAR with a DMG image."""
+    knowledge_base_values = {'year': 2016}
+
+    test_file_path = self._GetTestFilePath(['hfsplus_zlib.dmg.tar'])
+    self._SkipIfPathNotExists(test_file_path)
+
+    path_spec = path_spec_factory.Factory.NewPathSpec(
+        dfvfs_definitions.TYPE_INDICATOR_OS, location=test_file_path)
+    storage_writer = fake_writer.FakeStorageWriter()
+
+    expected_event_data_counts = {
+        'fs:stat': 2}
+
+    self._TestProcessPathSpec(
+        storage_writer, path_spec, expected_event_data_counts,
+        archive_types_string='tar',
+        knowledge_base_values=knowledge_base_values)
+
+    expected_event_data_counts = {
+        'fs:stat': 9}
+
+    self._TestProcessPathSpec(
+        storage_writer, path_spec, expected_event_data_counts,
+        archive_types_string='modi,tar',
+        knowledge_base_values=knowledge_base_values)
+
+  def testProcessPathSpecISO(self):
+    """Tests the ProcessPathSpec function on an ISO image."""
+    knowledge_base_values = {'year': 2016}
+
+    test_file_path = self._GetTestFilePath(['iso9660.raw'])
+    self._SkipIfPathNotExists(test_file_path)
+
+    path_spec = path_spec_factory.Factory.NewPathSpec(
+        dfvfs_definitions.TYPE_INDICATOR_OS, location=test_file_path)
+    path_spec = path_spec_factory.Factory.NewPathSpec(
+        dfvfs_definitions.TYPE_INDICATOR_RAW, parent=path_spec)
+    path_spec = path_spec_factory.Factory.NewPathSpec(
+        dfvfs_definitions.TYPE_INDICATOR_TSK, location='/',
+        parent=path_spec)
+    storage_writer = fake_writer.FakeStorageWriter()
+
+    expected_event_data_counts = {
+        'fs:stat': 5}
+
+    self._TestProcessPathSpec(
+        storage_writer, path_spec, expected_event_data_counts,
+        knowledge_base_values=knowledge_base_values)
+
+  def testProcessPathSpecTarWithISO(self):
+    """Tests the ProcessPathSpec function on a TAR with an ISO image."""
+    knowledge_base_values = {'year': 2016}
+
+    test_file_path = self._GetTestFilePath(['iso9660.raw.tar'])
+    self._SkipIfPathNotExists(test_file_path)
+
+    path_spec = path_spec_factory.Factory.NewPathSpec(
+        dfvfs_definitions.TYPE_INDICATOR_OS, location=test_file_path)
+    storage_writer = fake_writer.FakeStorageWriter()
+
+    expected_event_data_counts = {
+        'fs:stat': 2}
+
+    self._TestProcessPathSpec(
+        storage_writer, path_spec, expected_event_data_counts,
+        archive_types_string='tar',
+        knowledge_base_values=knowledge_base_values)
+
+    expected_event_data_counts = {
+        'fs:stat': 7}
+
+    self._TestProcessPathSpec(
+        storage_writer, path_spec, expected_event_data_counts,
+        archive_types_string='iso9660,tar',
+        knowledge_base_values=knowledge_base_values)
+
+  def testProcessPathSpecVHD(self):
+    """Tests the ProcessPathSpec function on a VHD image."""
+    knowledge_base_values = {'year': 2016}
+
+    test_file_path = self._GetTestFilePath(['image.vhd'])
+    self._SkipIfPathNotExists(test_file_path)
+
+    path_spec = path_spec_factory.Factory.NewPathSpec(
+        dfvfs_definitions.TYPE_INDICATOR_OS, location=test_file_path)
+    path_spec = path_spec_factory.Factory.NewPathSpec(
+        dfvfs_definitions.TYPE_INDICATOR_VHDI, parent=path_spec)
+    path_spec = path_spec_factory.Factory.NewPathSpec(
+        dfvfs_definitions.TYPE_INDICATOR_EXT, location='/',
+        parent=path_spec)
+    storage_writer = fake_writer.FakeStorageWriter()
+
+    expected_event_data_counts = {
+        'fs:stat': 5}
+
+    self._TestProcessPathSpec(
+        storage_writer, path_spec, expected_event_data_counts,
+        knowledge_base_values=knowledge_base_values)
+
+  def testProcessPathSpecTarWithVHD(self):
+    """Tests the ProcessPathSpec function on a TAR with a VHD image."""
+    knowledge_base_values = {'year': 2016}
+
+    test_file_path = self._GetTestFilePath(['image.vhd.tar'])
+    self._SkipIfPathNotExists(test_file_path)
+
+    path_spec = path_spec_factory.Factory.NewPathSpec(
+        dfvfs_definitions.TYPE_INDICATOR_OS, location=test_file_path)
+    storage_writer = fake_writer.FakeStorageWriter()
+
+    expected_event_data_counts = {
+        'fs:stat': 2}
+
+    self._TestProcessPathSpec(
+        storage_writer, path_spec, expected_event_data_counts,
+        archive_types_string='tar',
+        knowledge_base_values=knowledge_base_values)
+
+    expected_event_data_counts = {
+        'fs:stat': 7}
+
+    self._TestProcessPathSpec(
+        storage_writer, path_spec, expected_event_data_counts,
+        archive_types_string='tar,vhdi',
+        knowledge_base_values=knowledge_base_values)
 
   def testProcessPathSpecVMDK(self):
     """Tests the ProcessPathSpec function on a VMDK with symbolic links."""
@@ -649,15 +740,15 @@ class EventExtractionWorkerTest(shared_test_lib.BaseTestCase):
     path_spec = path_spec_factory.Factory.NewPathSpec(
         dfvfs_definitions.TYPE_INDICATOR_VMDK, parent=path_spec)
     path_spec = path_spec_factory.Factory.NewPathSpec(
-        dfvfs_definitions.TYPE_INDICATOR_TSK, location='/',
+        dfvfs_definitions.TYPE_INDICATOR_EXT, location='/',
         parent=path_spec)
     storage_writer = fake_writer.FakeStorageWriter()
 
-    expected_event_counters = {
-        'fs:stat': 18}
+    expected_event_data_counts = {
+        'fs:stat': 6}
 
     self._TestProcessPathSpec(
-        storage_writer, path_spec, expected_event_counters,
+        storage_writer, path_spec, expected_event_data_counts,
         knowledge_base_values=knowledge_base_values)
 
   # TODO: add tests for SetExtractionConfiguration
@@ -677,13 +768,11 @@ class EventExtractionWorkerTest(shared_test_lib.BaseTestCase):
     path_spec = self._GetTestFilePathSpec(['empty_file'])
     storage_writer = fake_writer.FakeStorageWriter()
 
-    # Typically there are 3 filestat events, but there can be 4 on platforms
-    # that support os.stat_result st_birthtime.
-    expected_event_counters = {
-        'fs:stat': [3, 4]}
+    expected_event_data_counts = {
+        'fs:stat': 1}
 
     self._TestProcessPathSpec(
-        storage_writer, path_spec, expected_event_counters,
+        storage_writer, path_spec, expected_event_data_counts,
         extraction_worker=extraction_worker,
         knowledge_base_values=knowledge_base_values)
 
@@ -716,14 +805,13 @@ class EventExtractionWorkerTest(shared_test_lib.BaseTestCase):
     path_spec = self._GetTestFilePathSpec(['test_pe.exe'])
     storage_writer = fake_writer.FakeStorageWriter()
 
-    # Typically there are 3 filestat events, but there can be 4 on platforms
-    # that support os.stat_result st_birthtime.
-    expected_event_counters = {
-        'fs:stat': [3, 4],
-        'pe': 3}
+    expected_event_data_counts = {
+        'fs:stat': 1,
+        'pe_coff:dll_import': 2,
+        'pe_coff:file': 1}
 
     self._TestProcessPathSpec(
-        storage_writer, path_spec, expected_event_counters,
+        storage_writer, path_spec, expected_event_data_counts,
         extraction_worker=extraction_worker,
         knowledge_base_values=knowledge_base_values)
 

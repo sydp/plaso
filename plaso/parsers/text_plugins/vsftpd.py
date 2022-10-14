@@ -48,20 +48,27 @@ class VsftpdLogTextPlugin(interface.TextPlugin):
       'nov': 11,
       'dec': 12}
 
-  _DATETIME_ELEMENTS = (
-      text_parser.PyparsingConstants.THREE_LETTERS.setResultsName('day') +
-      text_parser.PyparsingConstants.THREE_LETTERS.setResultsName('month') +
-      text_parser.PyparsingConstants.ONE_OR_TWO_DIGITS.setResultsName(
-          'day_of_month') +
-      text_parser.PyparsingConstants.TWO_DIGITS.setResultsName('hours') +
-      pyparsing.Suppress(':') +
-      text_parser.PyparsingConstants.TWO_DIGITS.setResultsName('minutes') +
-      pyparsing.Suppress(':') +
-      text_parser.PyparsingConstants.TWO_DIGITS.setResultsName('seconds') +
-      text_parser.PyparsingConstants.FOUR_DIGITS.setResultsName('year'))
+  _ONE_OR_TWO_DIGITS = pyparsing.Word(pyparsing.nums, max=2).setParseAction(
+      text_parser.PyParseIntCast)
+
+  _TWO_DIGITS = pyparsing.Word(pyparsing.nums, exact=2).setParseAction(
+      text_parser.PyParseIntCast)
+
+  _FOUR_DIGITS = pyparsing.Word(pyparsing.nums, exact=4).setParseAction(
+      text_parser.PyParseIntCast)
+
+  _THREE_LETTERS = pyparsing.Word(pyparsing.alphas, exact=3)
 
   # Whitespace is suppressed by pyparsing.
-  _DATE_TIME = pyparsing.Group(_DATETIME_ELEMENTS)
+
+  _DATE_TIME = pyparsing.Group(
+      _THREE_LETTERS.setResultsName('weekday') +
+      _THREE_LETTERS.setResultsName('month') +
+      _ONE_OR_TWO_DIGITS.setResultsName('day_of_month') +
+      _TWO_DIGITS.setResultsName('hours') + pyparsing.Suppress(':') +
+      _TWO_DIGITS.setResultsName('minutes') + pyparsing.Suppress(':') +
+      _TWO_DIGITS.setResultsName('seconds') +
+      _FOUR_DIGITS.setResultsName('year'))
 
   _LOG_LINE = (
       _DATE_TIME.setResultsName('date_time') +
@@ -75,8 +82,8 @@ class VsftpdLogTextPlugin(interface.TextPlugin):
     """Retrieves a time elements tuple from the structure.
 
     Args:
-        structure (pyparsing.ParseResults): structure of tokens derived from
-            a line of a vsftp log file.
+      structure (pyparsing.ParseResults): structure of tokens derived from
+          a line of a vsftp log file.
 
     Returns:
       tuple: containing:
@@ -90,25 +97,24 @@ class VsftpdLogTextPlugin(interface.TextPlugin):
     time_elements_tuple = self._GetValueFromStructure(structure, 'date_time')
     _, month, day_of_month, hours, minutes, seconds, year = time_elements_tuple
     month = self._MONTH_DICT.get(month.lower(), 0)
-    return (year, month, day_of_month, hours, minutes, seconds)
+    return year, month, day_of_month, hours, minutes, seconds
 
   def _ParseLogLine(self, parser_mediator, structure):
     """Parses a log line.
 
     Args:
-        parser_mediator (ParserMediator): mediates interactions between parsers
-            and other components, such as storage and dfVFS.
-        structure (pyparsing.ParseResults): structure of tokens derived from
-            a line of a text file.
+      parser_mediator (ParserMediator): mediates interactions between parsers
+          and other components, such as storage and dfVFS.
+      structure (pyparsing.ParseResults): structure of tokens derived from
+          a line of a text file.
     """
-    time_elements_tuple = self._GetTimeElementsTuple(structure)
     try:
+      time_elements_tuple = self._GetTimeElementsTuple(structure)
       date_time = dfdatetime_time_elements.TimeElements(
           time_elements_tuple=time_elements_tuple)
       date_time.is_local_time = True
-    except ValueError:
-      parser_mediator.ProduceExtractionWarning(
-          'invalid date time value: {0!s}'.format(time_elements_tuple))
+    except (TypeError, ValueError):
+      parser_mediator.ProduceExtractionWarning('invalid date time value')
       return
 
     event_data = VsftpdEventData()
@@ -164,15 +170,14 @@ class VsftpdLogTextPlugin(interface.TextPlugin):
     except pyparsing.ParseException:
       return False
 
-    time_elements_tuple = self._GetTimeElementsTuple(parsed_structure)
-
     try:
+      time_elements_tuple = self._GetTimeElementsTuple(parsed_structure)
       dfdatetime_time_elements.TimeElements(
           time_elements_tuple=time_elements_tuple)
-    except ValueError:
+    except (TypeError, ValueError):
       return False
 
     return True
 
 
-text_parser.PyparsingSingleLineTextParser.RegisterPlugin(VsftpdLogTextPlugin)
+text_parser.SingleLineTextParser.RegisterPlugin(VsftpdLogTextPlugin)

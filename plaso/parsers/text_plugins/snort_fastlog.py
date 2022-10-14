@@ -28,6 +28,8 @@ from plaso.containers import events
 from plaso.containers import time_events
 from plaso.lib import definitions
 from plaso.lib import errors
+from plaso.lib import regular_expressions
+from plaso.lib import yearless_helper
 from plaso.parsers import text_parser
 from plaso.parsers.text_plugins import interface
 
@@ -63,95 +65,63 @@ class SnortFastAlertEventData(events.EventData):
     self.source_port = None
 
 
-class SnortFastLogTextPlugin(interface.TextPlugin):
+class SnortFastLogTextPlugin(
+    interface.TextPlugin, yearless_helper.YearLessLogFormatHelper):
   """Text parser plugin for Snort3/Suricata fast-log alert log files."""
 
   NAME = 'snort:fastlog:alert'
   DATA_FORMAT = 'Snort3/Suricata fast-log alert log (fast.log) file'
 
-  _VERIFICATION_REGEX = re.compile(
-      # Date regex
-      r'^(\d{2}\/)?\d{2}\/\d{2}\-\d{2}:\d{2}:\d{2}.\d{6}\s*'
-      # Separator ([**])
-      r'\[\*\*\]\s*'
-      # Rule identifier
-      r'\[\d*:\d*:\d*\]\s*'
-      # Message
-      r'"?.*\"?\s*\[\*\*\]\s*'
-      # Optional Classification
-      r'(\[Classification:\s.*\])?\s*'
-      # Optional Priority
-      r'(\[Priority\:\s*\d{1}\])?\s*'
-      # Procotol
-      r'\{\w+\}\s*'
-      # Source IPv6 address
-      r'((([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:'
-      r'|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}'
-      r'(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[ 0-9a-fA-F]{1,4})'
-      r'{1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4} |([0-9a-fA-F]'
-      r'{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((: [0-9a-fA-F]'
-      r'{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4})'
-      r'{0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2 [0-4]'
-      r'|1{0,1}[0-9]){0,1}[0-9]).){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}'
-      r'[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}'
-      r'[0-9]).){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))'
-      # Source IPv4 address
-      r'|(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?'
-      r'[0-9][0-9]?)\.(25[0-5] |2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|'
-      r'2[0-4][0-9]|[01]?[0-9][0-9]?))'
-      # Optional source port
-      r'(:\d*)?\s*'
-      # Separator '->'
-      r'\-\>\s*'
-      # Destination IPv6-address
-      r'((([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:'
-      r'|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}'
-      r'(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[ 0-9a-fA-F]{1,4})'
-      r'{1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4} |([0-9a-fA-F]'
-      r'{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((: [0-9a-fA-F]'
-      r'{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4})'
-      r'{0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2 [0-4]'
-      r'|1{0,1}[0-9]){0,1}[0-9]).){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}'
-      r'[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}'
-      r'[0-9]).){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))'
-      # Destination IPv4 address
-      r'|(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?'
-      r'[0-9][0-9]?)\.(25[0-5] |2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|'
-      r'2[0-4][0-9]|[01]?[0-9][0-9]?))'
-      # Optional destination port
-      r'(:\d*)?$')
+  _VERIFICATION_REGEX = re.compile(''.join([
+      # Date: "MM/DD" and "YY/MM/DD"
+      r'^(\d{2}\/)?\d{2}\/\d{2}\-\d{2}:\d{2}:\d{2}.\d{6}\s*',
+      r'\[\*\*\]\s*',  # Separator ([**])
+      r'\[\d*:\d*:\d*\]\s*',  # Rule identifier
+      r'"?.*\"?\s*\[\*\*\]\s*',  # Message
+      r'(\[Classification:\s.*\])?\s*',  # Optional Classification
+      r'(\[Priority\:\s*\d{1}\])?\s*',  # Optional Priority
+      r'\{\w+\}\s*',  # Procotol
+      regular_expressions.IP_ADDRESS,  # Source IPv4 or IPv6 address
+      r'(:\d*)?\s*',  # Optional TCP/UDP source port
+      r'\-\>\s*',  # Separator '->'
+      regular_expressions.IP_ADDRESS,  # Destination IPv4 or IPv6 address
+      r'(:\d*)?$']))  # Optional TCP/UDP destination port
+
+  _INTEGER = pyparsing.Word(pyparsing.nums).setParseAction(
+      text_parser.PyParseIntCast)
+
+  _TWO_DIGITS = pyparsing.Word(pyparsing.nums, exact=2).setParseAction(
+      text_parser.PyParseIntCast)
 
   _SIX_DIGITS = pyparsing.Word(pyparsing.nums, exact=6).setParseAction(
       text_parser.PyParseIntCast)
 
   _DATE_MONTH_DAY = (
-      text_parser.PyparsingConstants.TWO_DIGITS.setResultsName('month') +
-      pyparsing.Suppress('/') +
-      text_parser.PyparsingConstants.TWO_DIGITS.setResultsName('day_of_month'))
+      _TWO_DIGITS.setResultsName('month') + pyparsing.Suppress('/') +
+      _TWO_DIGITS.setResultsName('day_of_month'))
 
   _DATE_YEAR_MONTH_DAY = (
-      text_parser.PyparsingConstants.TWO_DIGITS.setResultsName('year') +
-      pyparsing.Suppress('/') + _DATE_MONTH_DAY)
+      _TWO_DIGITS.setResultsName('year') + pyparsing.Suppress('/') +
+      _DATE_MONTH_DAY)
 
   _DATE_TIME = (
-      (_DATE_YEAR_MONTH_DAY | _DATE_MONTH_DAY) +
-      pyparsing.Suppress(text_parser.PyparsingConstants.HYPHEN) +
-      text_parser.PyparsingConstants.TWO_DIGITS.setResultsName('hours') +
-      pyparsing.Suppress(':') +
-      text_parser.PyparsingConstants.TWO_DIGITS.setResultsName('minutes') +
-      pyparsing.Suppress(':') +
-      text_parser.PyparsingConstants.TWO_DIGITS.setResultsName('seconds') +
-      pyparsing.Suppress('.') +
-      _SIX_DIGITS.setResultsName('fraction_of_second'))
+      (_DATE_YEAR_MONTH_DAY | _DATE_MONTH_DAY) + pyparsing.Suppress('-') +
+      _TWO_DIGITS.setResultsName('hours') + pyparsing.Suppress(':') +
+      _TWO_DIGITS.setResultsName('minutes') + pyparsing.Suppress(':') +
+      _TWO_DIGITS.setResultsName('seconds') + pyparsing.Suppress('.') +
+      _SIX_DIGITS.setResultsName('microseconds'))
+
+  _IP_ADDRESS = (
+      pyparsing.pyparsing_common.ipv4_address |
+      pyparsing.pyparsing_common.ipv6_address)
 
   _MESSAGE = pyparsing.Combine(pyparsing.OneOrMore(
       pyparsing.Word(pyparsing.printables, excludeChars='["') |
       pyparsing.White(' ', max=2))).setResultsName('message')
 
   _RULE_IDENTIFIER = pyparsing.Combine(
-      text_parser.PyparsingConstants.INTEGER + ':' +
-      text_parser.PyparsingConstants.INTEGER + ':' +
-      text_parser.PyparsingConstants.INTEGER).setResultsName('rule_identifier')
+      _INTEGER + ':' + _INTEGER + ':' + _INTEGER).setResultsName(
+          'rule_identifier')
 
   _FASTLOG_LINE = (
       _DATE_TIME + pyparsing.Suppress('[**] [') + _RULE_IDENTIFIER +
@@ -164,50 +134,62 @@ class SnortFastLogTextPlugin(interface.TextPlugin):
           pyparsing.Suppress(']')) +
       pyparsing.Optional(
           pyparsing.Suppress('[Priority:') +
-          text_parser.PyparsingConstants.INTEGER.setResultsName('priority') +
+          _INTEGER.setResultsName('priority') +
           pyparsing.Suppress(']')) +
       pyparsing.Suppress('{') +
       pyparsing.Word(pyparsing.alphanums).setResultsName('protocol') +
       pyparsing.Suppress('}') +
-      text_parser.PyparsingConstants.IP_ADDRESS.setResultsName('src_ip') +
+      _IP_ADDRESS.setResultsName('source_ip_address') +
       pyparsing.Optional(
           pyparsing.Suppress(':') +
-          text_parser.PyparsingConstants.INTEGER.setResultsName('src_port')) +
+          _INTEGER.setResultsName('source_port')) +
       pyparsing.Suppress('->') +
-      text_parser.PyparsingConstants.IP_ADDRESS.setResultsName('dst_ip') +
+      _IP_ADDRESS.setResultsName('destination_ip_address') +
       pyparsing.Optional(
           pyparsing.Suppress(':') +
-          text_parser.PyparsingConstants.INTEGER.setResultsName('dst_port')) +
+          _INTEGER.setResultsName('destination_port')) +
       pyparsing.Suppress(pyparsing.lineEnd()))
 
   _LINE_STRUCTURES = [('fastlog_line', _FASTLOG_LINE)]
 
   _SUPPORTED_KEYS = frozenset([key for key, _ in _LINE_STRUCTURES])
 
-  def __init__(self):
-    """Initializes a parser."""
-    super(SnortFastLogTextPlugin, self).__init__()
-    self._last_month = 0
-    self._year_use = 0
-
-  def _UpdateYear(self, parser_mediator, month):
-    """Updates the year to use for events, based on last observed month.
+  def _GetTimeElementsTuple(self, structure):
+    """Retrieves a time elements tuple from the structure.
 
     Args:
-      parser_mediator (ParserMediator): mediates interactions between parsers
-          and other components, such as storage and dfVFS.
-      month (int): month observed by the parser, where January is 1.
+      structure (pyparsing.ParseResults): structure of tokens derived from
+          a line of a text file.
+
+    Returns:
+      tuple: containing:
+        year (int): year.
+        month (int): month, where 1 represents January.
+        day_of_month (int): day of month, where 1 is the first day of the month.
+        hours (int): hours.
+        minutes (int): minutes.
+        seconds (int): seconds.
+        microseconds (int): fraction of second in microseconds.
+
+    Raises:
+      ValueError: if month contains an unsupported value.
     """
-    if not self._year_use:
-      self._year_use = parser_mediator.GetEstimatedYear()
+    month = self._GetValueFromStructure(structure, 'month')
+    year = self._GetValueFromStructure(structure, 'year')
+    day_of_month = self._GetValueFromStructure(structure, 'day_of_month')
+    hours = self._GetValueFromStructure(structure, 'hours')
+    minutes = self._GetValueFromStructure(structure, 'minutes')
+    seconds = self._GetValueFromStructure(structure, 'seconds')
+    microseconds = self._GetValueFromStructure(structure, 'microseconds')
 
-    if not self._last_month:
-      self._last_month = month
-      return
+    if year:
+      year += 2000
+    else:
+      self._UpdateYear(month)
 
-    if self._last_month == 12 and month == 1:
-      self._year_use += 1
-    self._last_month = month
+      year = self._GetYear()
+
+    return year, month, day_of_month, hours, minutes, seconds, microseconds
 
   def _ParseRecord(self, parser_mediator, key, structure):
     """Parses a log record structure and produces events.
@@ -228,34 +210,14 @@ class SnortFastLogTextPlugin(interface.TextPlugin):
       raise errors.ParseError(
           'Unable to parse record, unknown structure: {0:s}'.format(key))
 
-    month = self._GetValueFromStructure(structure, 'month')
-    year = self._GetValueFromStructure(structure, 'year')
-    day_of_month = self._GetValueFromStructure(structure, 'day_of_month')
-    hours = self._GetValueFromStructure(structure, 'hours')
-    minutes = self._GetValueFromStructure(structure, 'minutes')
-    seconds = self._GetValueFromStructure(structure, 'seconds')
-    fraction_of_second = self._GetValueFromStructure(
-        structure, 'fraction_of_second')
-
-    if month != 0:
-      self._UpdateYear(parser_mediator, month)
-
-    if year is not None:
-      year += 2000
-    else:
-      year = self._year_use
-
-    time_elements_tuple = (
-        year, month, day_of_month, hours, minutes, seconds, fraction_of_second)
-
     try:
+      time_elements_tuple = self._GetTimeElementsTuple(structure)
       date_time = dfdatetime_time_elements.TimeElementsInMicroseconds(
           time_elements_tuple=time_elements_tuple)
       date_time.is_local_time = True
 
-    except (ValueError, TypeError):
-      parser_mediator.ProduceExtractionWarning(
-          'invalid date time value: {0!s}'.format(time_elements_tuple))
+    except (TypeError, ValueError):
+      parser_mediator.ProduceExtractionWarning('invalid date time value')
       return
 
     event_data = SnortFastAlertEventData()
@@ -267,11 +229,14 @@ class SnortFastLogTextPlugin(interface.TextPlugin):
     event_data.classification = self._GetValueFromStructure(
         structure, 'classification')
     event_data.protocol = self._GetValueFromStructure(structure, 'protocol')
-    event_data.source_ip = self._GetValueFromStructure(structure, 'src_ip')
-    event_data.source_port = self._GetValueFromStructure( structure, 'src_port')
-    event_data.destination_ip = self._GetValueFromStructure(structure, 'dst_ip')
+    event_data.source_ip = self._GetValueFromStructure(
+        structure, 'source_ip_address')
+    event_data.source_port = self._GetValueFromStructure(
+        structure, 'source_port')
+    event_data.destination_ip = self._GetValueFromStructure(
+        structure, 'destination_ip_address')
     event_data.destination_port = self._GetValueFromStructure(
-        structure, 'dst_port')
+        structure, 'destination_port')
 
     event = time_events.DateTimeValuesEvent(
         date_time, definitions.TIME_DESCRIPTION_WRITTEN,
@@ -294,10 +259,9 @@ class SnortFastLogTextPlugin(interface.TextPlugin):
     except UnicodeDecodeError:
       return False
 
-    self._last_month = 0
-    self._year_use = 0
+    self._SetEstimatedYear(parser_mediator)
 
     return bool(self._VERIFICATION_REGEX.match(line))
 
 
-text_parser.PyparsingSingleLineTextParser.RegisterPlugin(SnortFastLogTextPlugin)
+text_parser.SingleLineTextParser.RegisterPlugin(SnortFastLogTextPlugin)

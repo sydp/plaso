@@ -37,18 +37,19 @@ class BodyfileTest(test_lib.ParserTestCase):
 
     expected_event_values = {
         'data_type': 'fs:bodyfile:entry',
-        'date_time': '2012-05-25 15:59:43',
+        'date_time': '2012-05-25T15:59:43',
         'filename': '/a_directory/another_file',
         'group_identifier': 5000,
         'inode': 16,
         'owner_identifier': '151107',
+        'timestamp': '2012-05-25 15:59:43.000000',
         'timestamp_desc': definitions.TIME_DESCRIPTION_LAST_ACCESS}
 
     self.CheckEventValues(storage_writer, events[25], expected_event_values)
 
     expected_event_values = {
         'data_type': 'fs:bodyfile:entry',
-        'date_time': '2012-05-25 15:59:44',
+        'date_time': '2012-05-25T15:59:44',
         'filename': '/a_directory/another_file',
         'group_identifier': 5000,
         'inode': 16,
@@ -59,30 +60,30 @@ class BodyfileTest(test_lib.ParserTestCase):
 
     expected_event_values = {
         'data_type': 'fs:bodyfile:entry',
-        'date_time': '2012-05-25 15:59:45',
+        'date_time': '2012-05-25T15:59:45',
         'filename': '/a_directory/another_file',
         'group_identifier': 5000,
         'inode': 16,
         'mode_as_string': 'r/rrw-------',
         'owner_identifier': '151107',
-        'timestamp_desc': definitions.TIME_DESCRIPTION_CHANGE}
+        'timestamp_desc': definitions.TIME_DESCRIPTION_METADATA_MODIFICATION}
 
     self.CheckEventValues(storage_writer, events[27], expected_event_values)
 
     expected_event_values = {
         'data_type': 'fs:bodyfile:entry',
-        'date_time': '2012-05-25 16:17:43',
+        'date_time': '2012-05-25T16:17:43',
         'filename': '/passwordz\r.txt',
         'group_identifier': 5000,
         'inode': 26,
         'owner_identifier': '151107',
-        'timestamp_desc': definitions.TIME_DESCRIPTION_CHANGE}
+        'timestamp_desc': definitions.TIME_DESCRIPTION_METADATA_MODIFICATION}
 
     self.CheckEventValues(storage_writer, events[38], expected_event_values)
 
     expected_event_values = {
         'data_type': 'fs:bodyfile:entry',
-        'date_time': '2019-11-16 09:27:58.189698048',
+        'date_time': '2019-11-16T09:27:58.189698048',
         'filename': '\\testdir2',
         'group_identifier': None,
         'inode': 48,
@@ -93,19 +94,19 @@ class BodyfileTest(test_lib.ParserTestCase):
 
     expected_event_values = {
         'data_type': 'fs:bodyfile:entry',
-        'date_time': '2020-07-30 06:41:05.354067456',
+        'date_time': '2020-07-30T06:41:05.354067456',
         'filename': '/file|with|pipes',
         'group_identifier': 0,
         'inode': 64,
         'mode_as_string': 'r/rrwxrwxrwx',
         'owner_identifier': '48',
-        'timestamp_desc': definitions.TIME_DESCRIPTION_CHANGE}
+        'timestamp_desc': definitions.TIME_DESCRIPTION_METADATA_MODIFICATION}
 
     self.CheckEventValues(storage_writer, events[59], expected_event_values)
 
     expected_event_values = {
         'data_type': 'fs:bodyfile:entry',
-        'date_time': '2020-08-19 18:48:01',
+        'date_time': '2020-08-19T18:48:01',
         'filename': '/file_symboliclink1',
         'group_identifier': 1000,
         'inode': 16,
@@ -115,6 +116,40 @@ class BodyfileTest(test_lib.ParserTestCase):
         'timestamp_desc': definitions.TIME_DESCRIPTION_MODIFICATION}
 
     self.CheckEventValues(storage_writer, events[68], expected_event_values)
+
+  def testParseWithTimeZone(self):
+    """Tests the Parse function with a time zone."""
+    parser = bodyfile.BodyfileParser()
+    storage_writer = self._ParseFile(['bodyfile'], parser, timezone='CET')
+
+    number_of_events = storage_writer.GetNumberOfAttributeContainers('event')
+    self.assertEqual(number_of_events, 71)
+
+    number_of_warnings = storage_writer.GetNumberOfAttributeContainers(
+        'extraction_warning')
+    self.assertEqual(number_of_warnings, 0)
+
+    number_of_warnings = storage_writer.GetNumberOfAttributeContainers(
+        'recovery_warning')
+    self.assertEqual(number_of_warnings, 0)
+
+    events = list(storage_writer.GetSortedEvents())
+
+    # Test this entry:
+    # 0|/a_directory/another_file|16|r/rrw-------|151107|5000|22|1337961583|
+    # 1337961584|1337961585|0
+
+    expected_event_values = {
+        'data_type': 'fs:bodyfile:entry',
+        'date_time': '2012-05-25T15:59:43',
+        'filename': '/a_directory/another_file',
+        'group_identifier': 5000,
+        'inode': 16,
+        'owner_identifier': '151107',
+        'timestamp': '2012-05-25 13:59:43.000000',
+        'timestamp_desc': definitions.TIME_DESCRIPTION_LAST_ACCESS}
+
+    self.CheckEventValues(storage_writer, events[25], expected_event_values)
 
   def testParseOnCorruptFile(self):
     """Tests the Parse function on a corrupt bodyfile."""
@@ -137,7 +172,7 @@ class BodyfileTest(test_lib.ParserTestCase):
     # Event extracted from line with unescaped \r character.
     expected_event_values = {
         'data_type': 'fs:bodyfile:entry',
-        'date_time': '2012-05-25 16:00:53',
+        'date_time': '2012-05-25T16:00:53',
         'filename': '/passwords\r.txt',
         'inode': 15,
         'timestamp_desc': definitions.TIME_DESCRIPTION_MODIFICATION}
@@ -147,7 +182,7 @@ class BodyfileTest(test_lib.ParserTestCase):
     # Event extracted from line with unescaped \\ character.
     expected_event_values = {
         'data_type': 'fs:bodyfile:entry',
-        'date_time': '2019-03-19 04:37:22',
+        'date_time': '2019-03-19T04:37:22',
         'filename': '/Windows\\System32',
         'inode': 75520,
         'timestamp_desc': definitions.TIME_DESCRIPTION_CREATION}

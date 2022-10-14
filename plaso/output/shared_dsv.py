@@ -8,18 +8,16 @@ from plaso.output import interface
 class DSVEventFormattingHelper(formatting_helper.EventFormattingHelper):
   """Delimiter separated values output module event formatting helper."""
 
-  def __init__(
-      self, output_mediator, field_formatting_helper, field_names,
-      field_delimiter=','):
+  def __init__(self, field_formatting_helper, field_names, field_delimiter=','):
     """Initializes a delimiter separated values event formatting helper.
 
     Args:
-      output_mediator (OutputMediator): output mediator.
       field_formatting_helper (FieldFormattingHelper): field formatting helper.
       field_names (list[str]): names of the fields to output.
       field_delimiter (Optional[str]): field delimiter.
     """
-    super(DSVEventFormattingHelper, self).__init__(output_mediator)
+    super(DSVEventFormattingHelper, self).__init__()
+    self._custom_fields = {}
     self._field_delimiter = field_delimiter
     self._field_names = field_names
     self._field_formatting_helper = field_formatting_helper
@@ -39,10 +37,13 @@ class DSVEventFormattingHelper(formatting_helper.EventFormattingHelper):
       return field.replace(self._field_delimiter, ' ')
     return field
 
-  def GetFormattedEvent(self, event, event_data, event_data_stream, event_tag):
+  def GetFormattedEvent(
+      self, output_mediator, event, event_data, event_data_stream, event_tag):
     """Retrieves a string representation of the event.
 
     Args:
+      output_mediator (OutputMediator): mediates interactions between output
+          modules and other components, such as storage and dfVFS.
       event (EventObject): event.
       event_data (EventData): event data.
       event_data_stream (EventDataStream): event data stream.
@@ -54,8 +55,14 @@ class DSVEventFormattingHelper(formatting_helper.EventFormattingHelper):
     field_values = []
     for field_name in self._field_names:
       field_value = self._field_formatting_helper.GetFormattedField(
-          self._output_mediator, field_name, event, event_data,
-          event_data_stream, event_tag)
+          output_mediator, field_name, event, event_data, event_data_stream,
+          event_tag)
+
+      if field_value is None and field_name in self._custom_fields:
+        field_value = self._custom_fields.get(field_name, None)
+
+      if field_value is None:
+        field_value = '-'
 
       field_value = self._SanitizeField(field_value)
       field_values.append(field_value)
@@ -69,6 +76,24 @@ class DSVEventFormattingHelper(formatting_helper.EventFormattingHelper):
       str: string representation of the field names.
     """
     return self._field_delimiter.join(self._field_names)
+
+  def SetAdditionalFields(self, field_names):
+    """Sets the names of additional fields to output.
+
+    Args:
+      field_names (list[str]): names of additional fields to output.
+    """
+    self._field_names.extend(field_names)
+
+  def SetCustomFields(self, field_names_and_values):
+    """Sets the names and values of custom fields to output.
+
+    Args:
+      field_names_and_values (list[tuple[str, str]]): names and values of
+          custom fields to output.
+    """
+    self._custom_fields = dict(field_names_and_values)
+    self._field_names.extend(self._custom_fields.keys())
 
   def SetFieldDelimiter(self, field_delimiter):
     """Sets the field delimiter.
@@ -91,12 +116,10 @@ class DSVOutputModule(interface.TextFileOutputModule):
   """Shared functionality for delimiter separated values output modules."""
 
   def __init__(
-      self, output_mediator, field_formatting_helper, names, delimiter=',',
-      header=None):
+      self, field_formatting_helper, names, delimiter=',', header=None):
     """Initializes a delimiter separated values output module.
 
     Args:
-      output_mediator (OutputMediator): an output mediator.
       field_formatting_helper (FieldFormattingHelper): field formatting helper.
       names (list[str]): names of the fields to output.
       delimiter (Optional[str]): field delimiter.
@@ -104,11 +127,26 @@ class DSVOutputModule(interface.TextFileOutputModule):
           generate a header from the field names.
     """
     event_formatting_helper = DSVEventFormattingHelper(
-        output_mediator, field_formatting_helper, names,
-        field_delimiter=delimiter)
-    super(DSVOutputModule, self).__init__(
-        output_mediator, event_formatting_helper)
+        field_formatting_helper, names, field_delimiter=delimiter)
+    super(DSVOutputModule, self).__init__(event_formatting_helper)
     self._header = header
+
+  def SetAdditionalFields(self, field_names):
+    """Sets the names of additional fields to output.
+
+    Args:
+      field_names (list[str]): names of additional fields to output.
+    """
+    self._event_formatting_helper.SetAdditionalFields(field_names)
+
+  def SetCustomFields(self, field_names_and_values):
+    """Sets the names and values of custom fields to output.
+
+    Args:
+      field_names_and_values (list[tuple[str, str]]): names and values of
+          custom fields to output.
+    """
+    self._event_formatting_helper.SetCustomFields(field_names_and_values)
 
   def SetFieldDelimiter(self, field_delimiter):
     """Sets the field delimiter.
@@ -126,8 +164,13 @@ class DSVOutputModule(interface.TextFileOutputModule):
     """
     self._event_formatting_helper.SetFields(field_names)
 
-  def WriteHeader(self):
-    """Writes the header to the output."""
+  def WriteHeader(self, output_mediator):
+    """Writes the header to the output.
+
+    Args:
+      output_mediator (OutputMediator): mediates interactions between output
+          modules and other components, such as storage and dfVFS.
+    """
     if self._header:
       output_text = self._header
     else:

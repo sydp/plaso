@@ -24,6 +24,10 @@ class TestAutomaticDestinationsOLECFPlugin(test_lib.OLECFPluginTestCase):
     # windows:lnk:link 33
     # windows:distributed_link_tracking:creation: 44
 
+    number_of_event_data = storage_writer.GetNumberOfAttributeContainers(
+        'event_data')
+    self.assertEqual(number_of_event_data, 66)
+
     number_of_events = storage_writer.GetNumberOfAttributeContainers('event')
     self.assertEqual(number_of_events, 88)
 
@@ -43,7 +47,7 @@ class TestAutomaticDestinationsOLECFPlugin(test_lib.OLECFPluginTestCase):
         'birth_droid_volume_identifier': (
             '{cf6619c2-66a8-44a6-8849-1582fcd3a338}'),
         'data_type': 'olecf:dest_list:entry',
-        'date_time': '2012-04-01 13:52:38.9975382',
+        'date_time': '2012-04-01T13:52:38.9975382+00:00',
         'droid_file_identifier': '{63eea867-7b85-11e1-8950-005056a50b40}',
         'droid_volume_identifier': '{cf6619c2-66a8-44a6-8849-1582fcd3a338}',
         'entry_number': 11,
@@ -53,12 +57,12 @@ class TestAutomaticDestinationsOLECFPlugin(test_lib.OLECFPluginTestCase):
         'pin_status': -1,
         'timestamp_desc': definitions.TIME_DESCRIPTION_MODIFICATION}
 
-    self.CheckEventValues(storage_writer, events[7], expected_event_values)
+    self.CheckEventValues(storage_writer, events[0], expected_event_values)
 
     # Check a WinLnkLinkEvent.
     expected_event_values = {
         'data_type': 'windows:lnk:link',
-        'date_time': '2010-11-10 07:51:16.7491250',
+        'date_time': '2010-11-10T07:51:16.7491250+00:00',
         'drive_serial_number': 0x24ba718b,
         'drive_type': 3,
         'file_attribute_flags': 0x00002020,
@@ -68,17 +72,17 @@ class TestAutomaticDestinationsOLECFPlugin(test_lib.OLECFPluginTestCase):
             'C:\\Users\\nfury\\AppData\\Roaming\\Microsoft\\Windows\\'
             'Libraries\\Documents.library-ms')}
 
-    self.CheckEventValues(storage_writer, events[1], expected_event_values)
+    self.CheckEventValues(storage_writer, events[12], expected_event_values)
 
     # Check a WindowsDistributedLinkTrackingCreationEvent.
     expected_event_values = {
         'data_type': 'windows:distributed_link_tracking:creation',
-        'date_time': '2012-03-31 23:01:03.5277415',
+        'date_time': '2012-03-31T23:01:03.5277415+00:00',
         'mac_address': '00:50:56:a5:0b:40',
         'origin': 'DestList entry at offset: 0x00000020',
         'uuid': '63eea867-7b85-11e1-8950-005056a50b40'}
 
-    self.CheckEventValues(storage_writer, events[5], expected_event_values)
+    self.CheckEventValues(storage_writer, events[16], expected_event_values)
 
   def testProcessVersion3(self):
     """Tests the Process function on version 3 .automaticDestinations-ms."""
@@ -89,6 +93,10 @@ class TestAutomaticDestinationsOLECFPlugin(test_lib.OLECFPluginTestCase):
     # Number of events:
     # olecf:dest_list:entry: 2
     # windows:lnk:link 2
+
+    number_of_event_data = storage_writer.GetNumberOfAttributeContainers(
+        'event_data')
+    self.assertEqual(number_of_event_data, 4)
 
     number_of_events = storage_writer.GetNumberOfAttributeContainers('event')
     self.assertEqual(number_of_events, 4)
@@ -109,7 +117,7 @@ class TestAutomaticDestinationsOLECFPlugin(test_lib.OLECFPluginTestCase):
         'birth_droid_volume_identifier': (
             '{00000000-0000-0000-0000-000000000000}'),
         'data_type': 'olecf:dest_list:entry',
-        'date_time': '2016-01-17 13:08:08.2475045',
+        'date_time': '2016-01-17T13:08:08.2475045+00:00',
         'droid_file_identifier': '{00000000-0000-0000-0000-000000000000}',
         'droid_volume_identifier': '{00000000-0000-0000-0000-000000000000}',
         'entry_number': 2,
@@ -118,7 +126,7 @@ class TestAutomaticDestinationsOLECFPlugin(test_lib.OLECFPluginTestCase):
         'pin_status': -1,
         'timestamp_desc': definitions.TIME_DESCRIPTION_MODIFICATION}
 
-    self.CheckEventValues(storage_writer, events[1], expected_event_values)
+    self.CheckEventValues(storage_writer, events[0], expected_event_values)
 
     # Check a WinLnkLinkEvent.
     expected_event_values = {
@@ -126,7 +134,7 @@ class TestAutomaticDestinationsOLECFPlugin(test_lib.OLECFPluginTestCase):
         'date_time': 'Not set',
         'timestamp_desc': definitions.TIME_DESCRIPTION_NOT_A_TIME}
 
-    self.CheckEventValues(storage_writer, events[0], expected_event_values)
+    self.CheckEventValues(storage_writer, events[2], expected_event_values)
 
 
 if __name__ == '__main__':

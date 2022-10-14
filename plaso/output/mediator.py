@@ -52,6 +52,7 @@ class OutputMediator(object):
     self._lcid = self._DEFAULT_LCID
     self._message_formatters = {}
     self._preferred_encoding = preferred_encoding
+    self._source_mappings = {}
     self._storage_reader = None
     self._text_prepend = None
     self._time_zone = None
@@ -99,6 +100,8 @@ class OutputMediator(object):
           message_formatter.AddHelper(custom_formatter_helper)
 
       self._message_formatters[message_formatter.data_type] = message_formatter
+      self._source_mappings[message_formatter.data_type] = (
+          message_formatter.source_mapping)
 
   def GetDisplayNameForPathSpec(self, path_spec):
     """Retrieves the display name for a path specification.
@@ -156,7 +159,7 @@ class OutputMediator(object):
             'atime', definitions.TIME_DESCRIPTION_LAST_ACCESS):
           return_characters[1] = 'A'
         elif description in (
-            'ctime', definitions.TIME_DESCRIPTION_CHANGE):
+            'ctime', definitions.TIME_DESCRIPTION_METADATA_MODIFICATION):
           return_characters[2] = 'C'
         elif description in (
             'crtime', definitions.TIME_DESCRIPTION_CREATION):
@@ -194,9 +197,8 @@ class OutputMediator(object):
       return '...B'
 
     # Metadata modification.
-    if event.timestamp_desc in [
-        definitions.TIME_DESCRIPTION_CHANGE,
-        definitions.TIME_DESCRIPTION_ENTRY_MODIFICATION]:
+    if event.timestamp_desc == (
+        definitions.TIME_DESCRIPTION_METADATA_MODIFICATION):
       return '..C.'
 
     return '....'
@@ -233,7 +235,8 @@ class OutputMediator(object):
       macb_representation.append('.')
 
     if ('ctime' in timestamp_descriptions or
-        definitions.TIME_DESCRIPTION_CHANGE in timestamp_descriptions):
+        definitions.TIME_DESCRIPTION_METADATA_MODIFICATION in (
+            timestamp_descriptions)):
       macb_representation.append('C')
     else:
       macb_representation.append('.')
@@ -276,6 +279,19 @@ class OutputMediator(object):
       str: relateive path of the path specification.
     """
     return path_helper.PathHelper.GetRelativePathForPathSpec(path_spec)
+
+  def GetSourceMapping(self, data_type):
+    """Retrieves the source mapping for a specific data type.
+
+    Args:
+      data_type (str): data type.
+
+    Returns:
+      tuple[str, str]: short and (long) source mappings or (None, None) if not
+          available.
+    """
+    data_type = data_type.lower()
+    return self._source_mappings.get(data_type, (None, None))
 
   def GetUsername(self, event_data, default_username='-'):
     """Retrieves the username related to the event.

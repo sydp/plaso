@@ -9,10 +9,10 @@ import textwrap
 from plaso import output  # pylint: disable=unused-import
 
 from plaso.cli import extraction_tool
-from plaso.cli import logger
 from plaso.cli import tool_options
 from plaso.cli.helpers import manager as helpers_manager
 from plaso.containers import reports
+from plaso.engine import configurations
 from plaso.engine import engine
 from plaso.engine import knowledge_base
 from plaso.lib import errors
@@ -24,7 +24,6 @@ from plaso.storage import factory as storage_factory
 
 class PstealTool(
     extraction_tool.ExtractionTool,
-    tool_options.HashersOptions,
     tool_options.OutputModuleOptions,
     tool_options.StorageFileOptions):
   """Psteal CLI tool.
@@ -39,6 +38,7 @@ class PstealTool(
   Attributes:
     dependencies_check (bool): True if the availability and versions of
         dependencies should be checked.
+    list_archive_types (bool): True if the archive types should be listed.
     list_hashers (bool): True if the hashers should be listed.
     list_output_modules (bool): True if information about the output modules
         should be shown.
@@ -96,9 +96,34 @@ class PstealTool(
     self._use_time_slicer = False
 
     self.dependencies_check = True
+    self.list_archive_types = False
     self.list_hashers = False
     self.list_output_modules = False
     self.list_parsers_and_plugins = False
+
+  def _CreateOutputAndFormattingProcessingConfiguration(self):
+    """Creates an output and formatting processing configuration.
+
+    Returns:
+      ProcessingConfiguration: output and formatting processing configuration.
+    """
+    if self._preferred_language:
+      preferred_language = self._preferred_language
+    else:
+      preferred_language = self._knowledge_base.language
+
+    configuration = configurations.ProcessingConfiguration()
+    configuration.data_location = self._data_location
+    configuration.debug_output = self._debug_mode
+    configuration.dynamic_time = self._output_dynamic_time
+    configuration.log_filename = self._log_file
+    configuration.preferred_language = preferred_language
+    configuration.preferred_time_zone = self._output_time_zone
+    configuration.profiling.directory = self._profiling_directory
+    configuration.profiling.profilers = self._profilers
+    configuration.profiling.sample_rate = self._profiling_sample_rate
+
+    return configuration
 
   def AddStorageOptions(self, argument_group):  # pylint: disable=arguments-renamed
     """Adds the storage options to the argument group.
@@ -139,7 +164,7 @@ class PstealTool(
     extraction_group = argument_parser.add_argument_group(
         'extraction arguments')
 
-    argument_helper_names = ['extraction', 'hashers', 'parsers']
+    argument_helper_names = ['archives', 'extraction', 'hashers', 'parsers']
     helpers_manager.ArgumentHelperManager.AddCommandLineArguments(
         extraction_group, names=argument_helper_names)
 
@@ -233,12 +258,13 @@ class PstealTool(
     # and output_time_zone options.
     self._ParseOutputOptions(options)
 
-    argument_helper_names = ['artifact_definitions', 'hashers', 'parsers']
+    argument_helper_names = ['archives', 'hashers', 'parsers']
     helpers_manager.ArgumentHelperManager.ParseOptions(
         options, self, names=argument_helper_names)
 
     self._ParseExtractionOptions(options)
 
+    self.list_archive_types = self._archive_types_string == 'list'
     self.list_hashers = self._hasher_names_string == 'list'
     self.list_parsers_and_plugins = self._parser_filter_expression == 'list'
 
@@ -247,9 +273,9 @@ class PstealTool(
     self.dependencies_check = getattr(options, 'dependencies_check', True)
 
     # Check the list options first otherwise required options will raise.
-    if (self.list_hashers or self.list_language_tags or
-        self.list_parsers_and_plugins or self.list_time_zones or
-        self.show_troubleshooting):
+    if (self.list_archive_types or self.list_hashers or
+        self.list_language_tags or self.list_parsers_and_plugins or
+        self.list_time_zones or self.show_troubleshooting):
       return
 
     # Check output modules after the other listable options, otherwise
@@ -263,7 +289,8 @@ class PstealTool(
 
     self._ParseInformationalOptions(options)
 
-    argument_helper_names = ['extraction', 'status_view']
+    argument_helper_names = [
+        'artifact_definitions', 'extraction', 'status_view']
     helpers_manager.ArgumentHelperManager.ParseOptions(
         options, self, names=argument_helper_names)
 
@@ -321,7 +348,7 @@ class PstealTool(
     finally:
       storage_reader.Close()
 
-    configuration = self._CreateExtractionProcessingConfiguration()
+    configuration = self._CreateOutputAndFormattingProcessingConfiguration()
 
     if self._output_format != 'null':
       self._status_view.SetMode(self._status_view_mode)
@@ -333,20 +360,6 @@ class PstealTool(
       storage_reader = (
           storage_factory.StorageFactory.CreateStorageReaderForFile(
               self._storage_file_path))
-
-      preferred_language = self._knowledge_base.language
-      if self._preferred_language:
-        preferred_language = self._preferred_language
-
-      if preferred_language:
-        try:
-          self._output_mediator.SetPreferredLanguageIdentifier(
-              preferred_language)
-        except (KeyError, TypeError):
-          logger.warning('Unable to to set preferred language: {0!s}.'.format(
-              preferred_language))
-
-      self._output_mediator.SetStorageReader(storage_reader)
 
       # TODO: add single process output and formatting engine support.
       output_engine = (

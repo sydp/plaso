@@ -59,6 +59,10 @@ class TestBagMRUWindowsRegistryPlugin(test_lib.RegistryPluginTestCase):
     storage_writer = self._ParseKeyWithPlugin(
         registry_key, plugin, file_entry=test_file_entry)
 
+    number_of_event_data = storage_writer.GetNumberOfAttributeContainers(
+        'event_data')
+    self.assertEqual(number_of_event_data, 9)
+
     number_of_events = storage_writer.GetNumberOfAttributeContainers('event')
     self.assertEqual(number_of_events, 15)
 
@@ -70,31 +74,36 @@ class TestBagMRUWindowsRegistryPlugin(test_lib.RegistryPluginTestCase):
         'recovery_warning')
     self.assertEqual(number_of_warnings, 0)
 
-    events = list(storage_writer.GetEvents())
-
     expected_event_values = {
-        'date_time': '2009-08-04 15:19:16.9977500',
         'data_type': 'windows:registry:bagmru',
-        'entries': (
-            'Index: 1 [MRU Value 0]: Shell item path: <My Computer>'),
+        'entries': 'Index: 1 [MRU Value 0]: Shell item path: <My Computer>',
+        'key_path': key_path,
+        'last_written_time': '2009-08-04T15:19:16.9977500+00:00',
         # This should just be the plugin name, as we're invoking it directly,
         # and not through the parser.
         'parser': plugin.NAME}
 
-    self.CheckEventValues(storage_writer, events[0], expected_event_values)
+    event_data = storage_writer.GetAttributeContainerByIndex('event_data', 0)
+    self.CheckEventData(event_data, expected_event_values)
 
     expected_event_values = {
-        'date_time': '2009-08-04 15:19:10.6696250',
+        'data_type': 'windows:registry:bagmru',
         'entries': (
-            'Index: 1 [MRU Value 0]: Shell item path: <My Computer> C:\\')}
+            'Index: 1 [MRU Value 0]: Shell item path: <My Computer> C:\\'),
+        'key_path': '{0:s}\\0'.format(key_path),
+        'last_written_time': '2009-08-04T15:19:10.6696250+00:00'}
 
-    self.CheckEventValues(storage_writer, events[1], expected_event_values)
+    event_data = storage_writer.GetAttributeContainerByIndex('event_data', 1)
+    self.CheckEventData(event_data, expected_event_values)
 
     expected_event_values = {
-        'date_time': '2009-08-04 15:19:16.9977500',
-        'key_path': '{0:s}\\0\\0\\0\\0\\0'.format(key_path)}
+        'data_type': 'windows:registry:bagmru',
+        'entries': None,
+        'key_path': '{0:s}\\0\\0\\0\\0\\0'.format(key_path),
+        'last_written_time': '2009-08-04T15:19:16.9977500+00:00'}
 
-    self.CheckEventValues(storage_writer, events[14], expected_event_values)
+    event_data = storage_writer.GetAttributeContainerByIndex('event_data', 8)
+    self.CheckEventData(event_data, expected_event_values)
 
 
 if __name__ == '__main__':

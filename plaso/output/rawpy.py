@@ -15,20 +15,18 @@ class NativePythonEventFormattingHelper(
     formatting_helper.EventFormattingHelper):
   """Native (or "raw") Python output module event formatting helper."""
 
-  def __init__(self, output_mediator):
-    """Initializes a JSON output module event formatting helper.
-
-    Args:
-      output_mediator (OutputMediator): output mediator.
-    """
-    super(NativePythonEventFormattingHelper, self).__init__(output_mediator)
+  def __init__(self):
+    """Initializes a Native Python output module event formatting helper."""
+    super(NativePythonEventFormattingHelper, self).__init__()
     self._field_formatting_helper = dynamic.DynamicFieldFormattingHelper()
 
   def _GetFormattedEventNativePython(
-      self, event, event_data, event_data_stream, event_tag):
+      self, output_mediator, event, event_data, event_data_stream, event_tag):
     """Retrieves a native Python string representation of the event.
 
     Args:
+      output_mediator (OutputMediator): mediates interactions between output
+          modules and other components, such as storage and dfVFS.
       event (EventObject): event.
       event_data (EventData): event data.
       event_data_stream (EventDataStream): event data stream.
@@ -78,20 +76,20 @@ class NativePythonEventFormattingHelper(
 
     if 'display_name' not in event_attribute_names:
       attribute_value = self._field_formatting_helper.GetFormattedField(
-          self._output_mediator, 'display_name', event, event_data,
-          event_data_stream, event_tag)
+          output_mediator, 'display_name', event, event_data, event_data_stream,
+          event_tag)
       event_attributes.append(('display_name', attribute_value))
 
     if 'filename' not in event_attribute_names:
       attribute_value = self._field_formatting_helper.GetFormattedField(
-          self._output_mediator, 'filename', event, event_data,
-          event_data_stream, event_tag)
+          output_mediator, 'filename', event, event_data, event_data_stream,
+          event_tag)
       event_attributes.append(('filename', attribute_value))
 
     if 'inode' not in event_attribute_names:
       attribute_value = self._field_formatting_helper.GetFormattedField(
-          self._output_mediator, 'inode', event, event_data,
-          event_data_stream, event_tag)
+          output_mediator, 'inode', event, event_data, event_data_stream,
+          event_tag)
       event_attributes.append(('inode', attribute_value))
 
     for attribute_name, attribute_value in sorted(event_attributes):
@@ -131,10 +129,13 @@ class NativePythonEventFormattingHelper(
 
     return '\n'.join(lines_of_text)
 
-  def GetFormattedEvent(self, event, event_data, event_data_stream, event_tag):
+  def GetFormattedEvent(
+      self, output_mediator, event, event_data, event_data_stream, event_tag):
     """Retrieves a string representation of the event.
 
     Args:
+      output_mediator (OutputMediator): mediates interactions between output
+          modules and other components, such as storage and dfVFS.
       event (EventObject): event.
       event_data (EventData): event data.
       event_data_stream (EventDataStream): event data stream.
@@ -144,7 +145,7 @@ class NativePythonEventFormattingHelper(
       str: string representation of the event.
     """
     return self._GetFormattedEventNativePython(
-        event, event_data, event_data_stream, event_tag)
+        output_mediator, event, event_data, event_data_stream, event_tag)
 
 
 class NativePythonOutputModule(interface.TextFileOutputModule):
@@ -153,15 +154,10 @@ class NativePythonOutputModule(interface.TextFileOutputModule):
   NAME = 'rawpy'
   DESCRIPTION = 'native (or "raw") Python output.'
 
-  def __init__(self, output_mediator):
-    """Initializes a native (or "raw") Python output module.
-
-    Args:
-      output_mediator (OutputMediator): an output mediator.
-    """
-    event_formatting_helper = NativePythonEventFormattingHelper(output_mediator)
-    super(NativePythonOutputModule, self).__init__(
-        output_mediator, event_formatting_helper)
+  def __init__(self):
+    """Initializes an output module."""
+    event_formatting_helper = NativePythonEventFormattingHelper()
+    super(NativePythonOutputModule, self).__init__(event_formatting_helper)
 
 
 manager.OutputManager.RegisterOutput(NativePythonOutputModule)

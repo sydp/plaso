@@ -72,41 +72,46 @@ class ApacheAccessLogTextPlugin(interface.TextPlugin):
       'nov': 11,
       'dec': 12}
 
+  _INTEGER = pyparsing.Word(pyparsing.nums).setParseAction(
+      text_parser.PyParseIntCast)
+
+  _TWO_DIGITS = pyparsing.Word(pyparsing.nums, exact=2).setParseAction(
+      text_parser.PyParseIntCast)
+
+  _FOUR_DIGITS = pyparsing.Word(pyparsing.nums, exact=4).setParseAction(
+      text_parser.PyParseIntCast)
+
+  _THREE_LETTERS = pyparsing.Word(pyparsing.alphas, exact=3)
+
+  _TIME_ZONE_OFFSET = pyparsing.Combine(
+      pyparsing.oneOf(['-', '+']) +
+      pyparsing.Word(pyparsing.nums, exact=4)).setResultsName('time_offset')
+
   # Date format [18/Sep/2011:19:18:28 -0400]
   _DATE_TIME = pyparsing.Group(
-      pyparsing.Suppress('[') +
-      text_parser.PyparsingConstants.TWO_DIGITS.setResultsName('day') +
-      pyparsing.Suppress('/') +
-      text_parser.PyparsingConstants.THREE_LETTERS.setResultsName('month') +
-      pyparsing.Suppress('/') +
-      text_parser.PyparsingConstants.FOUR_DIGITS.setResultsName('year') +
-      pyparsing.Suppress(':') +
-      text_parser.PyparsingConstants.TWO_DIGITS.setResultsName('hours') +
-      pyparsing.Suppress(':') +
-      text_parser.PyparsingConstants.TWO_DIGITS.setResultsName('minutes') +
-      pyparsing.Suppress(':') +
-      text_parser.PyparsingConstants.TWO_DIGITS.setResultsName('seconds') +
-      pyparsing.Combine(
-          pyparsing.oneOf(['-', '+']) +
-          pyparsing.Word(
-              pyparsing.nums, exact=4)).setResultsName('time_offset') +
-      pyparsing.Suppress(']')).setResultsName('date_time')
+      pyparsing.Suppress('[') + _TWO_DIGITS.setResultsName('day_of_month') +
+      pyparsing.Suppress('/') + _THREE_LETTERS.setResultsName('month') +
+      pyparsing.Suppress('/') + _FOUR_DIGITS.setResultsName('year') +
+      pyparsing.Suppress(':') + _TWO_DIGITS.setResultsName('hours') +
+      pyparsing.Suppress(':') + _TWO_DIGITS.setResultsName('minutes') +
+      pyparsing.Suppress(':') + _TWO_DIGITS.setResultsName('seconds') +
+      _TIME_ZONE_OFFSET + pyparsing.Suppress(']')).setResultsName('date_time')
 
   _HTTP_REQUEST = (
       pyparsing.Suppress('"') +
       pyparsing.SkipTo('" ').setResultsName('http_request') +
       pyparsing.Suppress('"'))
 
-  _PORT_NUMBER = text_parser.PyparsingConstants.INTEGER.setResultsName(
-      'port_number')
+  _IP_ADDRESS = (
+      pyparsing.pyparsing_common.ipv4_address |
+      pyparsing.pyparsing_common.ipv6_address)
 
   _REMOTE_NAME = (
       pyparsing.Word(pyparsing.alphanums) |
       pyparsing.Literal('-')).setResultsName('remote_name')
 
   _RESPONSE_BYTES = (
-      pyparsing.Literal('-') |
-      text_parser.PyparsingConstants.INTEGER).setResultsName('response_bytes')
+      pyparsing.Literal('-') | _INTEGER).setResultsName('response_bytes')
 
   _REFERER = (
       pyparsing.Suppress('"') +
@@ -130,24 +135,24 @@ class ApacheAccessLogTextPlugin(interface.TextPlugin):
   # Defined in https://httpd.apache.org/docs/2.4/logs.html
   # format: "%h %l %u %t \"%r\" %>s %b"
   _COMMON_LOG_FORMAT_LINE = (
-      text_parser.PyparsingConstants.IP_ADDRESS.setResultsName('ip_address') +
+      _IP_ADDRESS.setResultsName('ip_address') +
       _REMOTE_NAME +
       _USER_NAME +
       _DATE_TIME +
       _HTTP_REQUEST +
-      text_parser.PyparsingConstants.INTEGER.setResultsName('response_code') +
+      _INTEGER.setResultsName('response_code') +
       _RESPONSE_BYTES +
       pyparsing.lineEnd())
 
   # Defined in https://httpd.apache.org/docs/2.4/logs.html
   # format: "%h %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-agent}i\""
   _COMBINED_LOG_FORMAT_LINE = (
-      text_parser.PyparsingConstants.IP_ADDRESS.setResultsName('ip_address') +
+      _IP_ADDRESS.setResultsName('ip_address') +
       _REMOTE_NAME +
       _USER_NAME +
       _DATE_TIME +
       _HTTP_REQUEST +
-      text_parser.PyparsingConstants.INTEGER.setResultsName('response_code') +
+      _INTEGER.setResultsName('response_code') +
       _RESPONSE_BYTES +
       _REFERER +
       _USER_AGENT +
@@ -158,13 +163,13 @@ class ApacheAccessLogTextPlugin(interface.TextPlugin):
   _VHOST_COMBINED_LOG_FORMAT = (
       _SERVER_NAME +
       pyparsing.Suppress(':') +
-      _PORT_NUMBER +
-      text_parser.PyparsingConstants.IP_ADDRESS.setResultsName('ip_address') +
+      _INTEGER.setResultsName('port_number') +
+      _IP_ADDRESS.setResultsName('ip_address') +
       _REMOTE_NAME +
       _USER_NAME +
       _DATE_TIME +
       _HTTP_REQUEST +
-      text_parser.PyparsingConstants.INTEGER.setResultsName('response_code') +
+      _INTEGER.setResultsName('response_code') +
       _RESPONSE_BYTES +
       _REFERER +
       _USER_AGENT +
@@ -195,18 +200,17 @@ class ApacheAccessLogTextPlugin(interface.TextPlugin):
     """
     year = self._GetValueFromStructure(structure, 'year')
     month = self._GetValueFromStructure(structure, 'month')
+    day_of_month = self._GetValueFromStructure(structure, 'day_of_month')
+    hours = self._GetValueFromStructure(structure, 'hours')
+    minutes = self._GetValueFromStructure(structure, 'minutes')
+    seconds = self._GetValueFromStructure(structure, 'seconds')
+    time_offset = self._GetValueFromStructure(structure, 'time_offset')
 
     try:
       month = self._MONTH_DICT.get(month.lower(), 0)
     except AttributeError as exception:
       raise ValueError('unable to parse month with error: {0!s}.'.format(
           exception))
-
-    day_of_month = self._GetValueFromStructure(structure, 'day')
-    hours = self._GetValueFromStructure(structure, 'hours')
-    minutes = self._GetValueFromStructure(structure, 'minutes')
-    seconds = self._GetValueFromStructure(structure, 'seconds')
-    time_offset = self._GetValueFromStructure(structure, 'time_offset')
 
     try:
       time_zone_offset = int(time_offset[1:3], 10) * 60
@@ -254,14 +258,21 @@ class ApacheAccessLogTextPlugin(interface.TextPlugin):
               date_time_string, exception))
       return
 
+    remote_name = self._GetValueFromStructure(structure, 'remote_name')
+    if remote_name == '-':
+      remote_name = None
+
+    user_name = self._GetValueFromStructure(structure, 'user_name')
+    if user_name == '-':
+      user_name = None
+
     event = time_events.DateTimeValuesEvent(
         date_time, definitions.TIME_DESCRIPTION_RECORDED)
 
     event_data = ApacheAccessEventData()
     event_data.ip_address = self._GetValueFromStructure(structure, 'ip_address')
-    event_data.remote_name = self._GetValueFromStructure(
-        structure, 'remote_name')
-    event_data.user_name = self._GetValueFromStructure(structure, 'user_name')
+    event_data.remote_name = remote_name
+    event_data.user_name = user_name
     event_data.http_request = self._GetValueFromStructure(
         structure, 'http_request')
     event_data.http_response_code = self._GetValueFromStructure(
@@ -270,8 +281,11 @@ class ApacheAccessLogTextPlugin(interface.TextPlugin):
         structure, 'response_bytes')
 
     if key in ('combined_log_format', 'vhost_combined_log_format'):
-      event_data.http_request_referer = self._GetValueFromStructure(
-          structure, 'referer')
+      referer = self._GetValueFromStructure(structure, 'referer')
+      if referer == '-':
+        referer = None
+
+      event_data.http_request_referer = referer
       event_data.http_request_user_agent = self._GetValueFromStructure(
           structure, 'user_agent')
 
@@ -313,5 +327,4 @@ class ApacheAccessLogTextPlugin(interface.TextPlugin):
     return True
 
 
-text_parser.PyparsingSingleLineTextParser.RegisterPlugin(
-    ApacheAccessLogTextPlugin)
+text_parser.SingleLineTextParser.RegisterPlugin(ApacheAccessLogTextPlugin)

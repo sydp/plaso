@@ -2,10 +2,8 @@
 """Output module field formatting helper."""
 
 import abc
-import csv
 import datetime
 import math
-import os
 import pytz
 
 from dfdatetime import posix_time as dfdatetime_posix_time
@@ -19,20 +17,14 @@ from plaso.output import logger
 class EventFormattingHelper(object):
   """Output module event formatting helper."""
 
-  def __init__(self, output_mediator):
-    """Initializes an event formatting helper.
-
-    Args:
-      output_mediator (OutputMediator): output mediator.
-    """
-    super(EventFormattingHelper, self).__init__()
-    self._output_mediator = output_mediator
-
   @abc.abstractmethod
-  def GetFormattedEvent(self, event, event_data, event_data_stream, event_tag):
+  def GetFormattedEvent(
+      self, output_mediator, event, event_data, event_data_stream, event_tag):
     """Retrieves a string representation of the event.
 
     Args:
+      output_mediator (OutputMediator): mediates interactions between output
+          modules and other components, such as storage and dfVFS.
       event (EventObject): event.
       event_data (EventData): event data.
       event_data_stream (EventDataStream): event data stream.
@@ -57,7 +49,6 @@ class FieldFormattingHelper(object):
     self._callback_functions = {}
     self._event_data_stream_field_names = event_data_stream.GetAttributeNames()
     self._event_tag_field_names = []
-    self._source_mappings = {}
 
     for field_name, callback_name in self._FIELD_FORMAT_CALLBACKS.items():
       if callback_name == '_FormatTag':
@@ -75,7 +66,8 @@ class FieldFormattingHelper(object):
     """Formats a date and time field in ISO 8601 format.
 
     Args:
-      output_mediator (OutputMediator): output mediator.
+      output_mediator (OutputMediator): mediates interactions between output
+          modules and other components, such as storage and dfVFS.
       event (EventObject): event.
       event_data (EventData): event data.
       event_data_stream (EventDataStream): event data stream.
@@ -175,7 +167,8 @@ class FieldFormattingHelper(object):
     it is derived from the path specification.
 
     Args:
-      output_mediator (OutputMediator): output mediator.
+      output_mediator (OutputMediator): mediates interactions between output
+          modules and other components, such as storage and dfVFS.
       event (EventObject): event.
       event_data (EventData): event data.
       event_data_stream (EventDataStream): event data stream.
@@ -204,7 +197,8 @@ class FieldFormattingHelper(object):
     it is derived from the path specification.
 
     Args:
-      output_mediator (OutputMediator): output mediator.
+      output_mediator (OutputMediator): mediates interactions between output
+          modules and other components, such as storage and dfVFS.
       event (EventObject): event.
       event_data (EventData): event data.
       event_data_stream (EventDataStream): event data stream.
@@ -230,7 +224,8 @@ class FieldFormattingHelper(object):
     """Formats a hostname field.
 
     Args:
-      output_mediator (OutputMediator): output mediator.
+      output_mediator (OutputMediator): mediates interactions between output
+          modules and other components, such as storage and dfVFS.
       event (EventObject): event.
       event_data (EventData): event data.
       event_data_stream (EventDataStream): event data stream.
@@ -244,7 +239,8 @@ class FieldFormattingHelper(object):
     """Formats an inode field.
 
     Args:
-      output_mediator (OutputMediator): output mediator.
+      output_mediator (OutputMediator): mediates interactions between output
+          modules and other components, such as storage and dfVFS.
       event (EventObject): event.
       event_data (EventData): event data.
       event_data_stream (EventDataStream): event data stream.
@@ -290,7 +286,8 @@ class FieldFormattingHelper(object):
     """Formats a legacy MACB representation field.
 
     Args:
-      output_mediator (OutputMediator): output mediator.
+      output_mediator (OutputMediator): mediates interactions between output
+          modules and other components, such as storage and dfVFS.
       event (EventObject): event.
       event_data (EventData): event data.
       event_data_stream (EventDataStream): event data stream.
@@ -305,7 +302,8 @@ class FieldFormattingHelper(object):
     """Formats a message field.
 
     Args:
-      output_mediator (OutputMediator): output mediator.
+      output_mediator (OutputMediator): mediates interactions between output
+          modules and other components, such as storage and dfVFS.
       event (EventObject): event.
       event_data (EventData): event data.
       event_data_stream (EventDataStream): event data stream.
@@ -336,7 +334,8 @@ class FieldFormattingHelper(object):
     """Formats a short message field.
 
     Args:
-      output_mediator (OutputMediator): output mediator.
+      output_mediator (OutputMediator): mediates interactions between output
+          modules and other components, such as storage and dfVFS.
       event (EventObject): event.
       event_data (EventData): event data.
       event_data_stream (EventDataStream): event data stream.
@@ -367,7 +366,8 @@ class FieldFormattingHelper(object):
     """Formats a source field.
 
     Args:
-      output_mediator (OutputMediator): output mediator.
+      output_mediator (OutputMediator): mediates interactions between output
+          modules and other components, such as storage and dfVFS.
       event (EventObject): event.
       event_data (EventData): event data.
       event_data_stream (EventDataStream): event data stream.
@@ -379,22 +379,17 @@ class FieldFormattingHelper(object):
       NoFormatterFound: if no event formatter can be found to match the data
           type in the event data.
     """
-    if not self._source_mappings:
-      self._ReadSourceMappings(output_mediator)
-
-    data_type = getattr(event_data, 'data_type', 'default')
-    _, source = self._source_mappings.get(data_type, (None, None))
-    if source is None:
-      return 'N/A'
-
-    return source
+    data_type = getattr(event_data, 'data_type', None) or '-'
+    _, source = output_mediator.GetSourceMapping(data_type)
+    return source or 'N/A'
 
   def _FormatSourceShort(
       self, output_mediator, event, event_data, event_data_stream):
     """Formats a short source field.
 
     Args:
-      output_mediator (OutputMediator): output mediator.
+      output_mediator (OutputMediator): mediates interactions between output
+          modules and other components, such as storage and dfVFS.
       event (EventObject): event.
       event_data (EventData): event data.
       event_data_stream (EventDataStream): event data stream.
@@ -406,21 +401,16 @@ class FieldFormattingHelper(object):
       NoFormatterFound: If no event formatter can be found to match the data
           type in the event data.
     """
-    if not self._source_mappings:
-      self._ReadSourceMappings(output_mediator)
-
-    data_type = getattr(event_data, 'data_type', None)
-    source_short, _ = self._source_mappings.get(data_type, (None, None))
-    if source_short is None:
-      return 'N/A'
-
-    return source_short
+    data_type = getattr(event_data, 'data_type', None) or '-'
+    source_short, _ = output_mediator.GetSourceMapping(data_type)
+    return source_short or 'N/A'
 
   def _FormatTag(self, output_mediator, event_tag):
     """Formats an event tag field.
 
     Args:
-      output_mediator (OutputMediator): output mediator.
+      output_mediator (OutputMediator): mediates interactions between output
+          modules and other components, such as storage and dfVFS.
       event_tag (EventTag): event tag or None if not set.
 
     Returns:
@@ -435,7 +425,8 @@ class FieldFormattingHelper(object):
     """Formats a time field.
 
     Args:
-      output_mediator (OutputMediator): output mediator.
+      output_mediator (OutputMediator): mediates interactions between output
+          modules and other components, such as storage and dfVFS.
       event (EventObject): event.
       event_data (EventData): event data.
       event_data_stream (EventDataStream): event data stream.
@@ -484,7 +475,8 @@ class FieldFormattingHelper(object):
     """Formats a time zone field.
 
     Args:
-      output_mediator (OutputMediator): output mediator.
+      output_mediator (OutputMediator): mediates interactions between output
+          modules and other components, such as storage and dfVFS.
       event (EventObject): event.
       event_data (EventData): event data.
       event_data_stream (EventDataStream): event data stream.
@@ -525,7 +517,8 @@ class FieldFormattingHelper(object):
     """Formats an username field.
 
     Args:
-      output_mediator (OutputMediator): output mediator.
+      output_mediator (OutputMediator): mediates interactions between output
+          modules and other components, such as storage and dfVFS.
       event (EventObject): event.
       event_data (EventData): event data.
       event_data_stream (EventDataStream): event data stream.
@@ -536,33 +529,6 @@ class FieldFormattingHelper(object):
     return output_mediator.GetUsername(event_data)
 
   # pylint: enable=unused-argument
-
-  # TODO: move to mediator.
-  def _ReadSourceMappings(self, output_mediator):
-    """Reads the source mappings from the sources.config data file.
-
-    Args:
-      output_mediator (OutputMediator): output mediator.
-    """
-    self._source_mappings = {}
-
-    try:
-      sources_data_file = os.path.join(
-          output_mediator.data_location, 'sources.config')
-
-      with open(sources_data_file, encoding='utf8') as file_object:
-        csv_reader = csv.reader(file_object, delimiter='\t')
-        # Note that csv.reader returns a list per row.
-        header_row = next(csv_reader)
-        if header_row == ['data_type', 'short_source', 'source']:
-          for row in csv_reader:
-            try:
-              self._source_mappings[row[0]] = (row[1], row[2])
-            except IndexError:
-              logger.error('Invalid source mapping: {0!s}'.format(row))
-
-    except (IOError, TypeError, csv.Error):
-      pass
 
   def _ReportEventError(self, event, event_data, error_message):
     """Reports an event related error.
@@ -589,7 +555,8 @@ class FieldFormattingHelper(object):
     """Formats the specified field.
 
     Args:
-      output_mediator (OutputMediator): output mediator.
+      output_mediator (OutputMediator): mediates interactions between output
+          modules and other components, such as storage and dfVFS.
       field_name (str): name of the field.
       event (EventObject): event.
       event_data (EventData): event data.
@@ -597,7 +564,7 @@ class FieldFormattingHelper(object):
       event_tag (EventTag): event tag.
 
     Returns:
-      str: value of the field.
+      str: value of the field or None if not available.
     """
     if field_name in self._event_tag_field_names:
       return self._FormatTag(output_mediator, event_tag)
@@ -611,10 +578,7 @@ class FieldFormattingHelper(object):
     else:
       output_value = getattr(event_data, field_name, None)
 
-    if output_value is None:
-      output_value = '-'
-
-    elif not isinstance(output_value, str):
+    if output_value is not None and not isinstance(output_value, str):
       output_value = '{0!s}'.format(output_value)
 
     return output_value
